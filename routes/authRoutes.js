@@ -11,6 +11,6 @@ router.post('/register',validateMiddleware(registerSchema), authController.regis
 router.post('/login',validateMiddleware(loginSchema),  authController.login);
 
 // POST /api/V1/auth/refresh-token
-router.post('/refresh-token',validateMiddleware(refreshTokenSchema),  authController.refreshToken);
+router.post('/refresh-token',validateMiddleware(refreshTokenSchema),  authController.refresh);
 
 module.exports = router;

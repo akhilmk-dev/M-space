@@ -1,85 +1,142 @@
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const Student = require('../models/Student');
-const Tutor = require('../models/Tutor');
-const catchAsync = require('../utils/catchAsync');
-const { BadRequestError, ConflictError, UnAuthorizedError, ForbiddenError } = require('../utils/customErrors');
-const { generateAccessToken, generateRefreshToken } = require('../utils/generateTokens');
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+const Role = require("../models/Roles");
+const { registerSchema } = require('../validations/authValidation');
 
-const getModel = (role) => {
-  if (!role) throw new BadRequestError("Role is required");
-  return role === 'student' ? Student : Tutor;
+const {
+  BadRequestError,
+  UnAuthorizedError,
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+} = require("../utils/customErrors");
+
+const { generateAccessToken, generateRefreshToken } = require("../utils/generateTokens");
+
+
+// ==========================
+// REGISTER
+// ==========================
+const register = async (req, res, next) => {
+  try {
+    const { error, value } = registerSchema.validate(req.body, { abortEarly: false });
+    if (error) {
+      error.isJoi = true;
+      throw error;
+    }
+
+    const { name, email, phone, password, role } = value; // `role` is the role name
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      throw new ConflictError("Email already in use.");
+    }
+
+    // ✅ Find roleId by role_name
+    const roleDoc = await Role.findOne({ role_name: { $regex: `^${role}$`, $options: "i" } });
+    if (!roleDoc) {
+      throw new NotFoundError(`Role '${role}' not found.`);
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const newUser = new User({
+      name,
+      email,
+      phone,
+      roleId: roleDoc._id, // Use roleId in User schema
+      passwordHash,
+      status: true,
+    });
+
+    await newUser.save();
+
+    res.status(201).json({ status:success, message: "User registered successfully.",data:newUser });
+  } catch (err) {
+    next(err);
+  }
 };
 
-exports.register = catchAsync(async (req, res) => {
-  const { name, email, password, role } = req.body;
+// ==========================
+// LOGIN
+// ==========================
+const login = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
 
-  const Model = getModel(role);
-  const existingUser = await Model.findOne({ email });
+    if (!email || !password) {
+      throw new BadRequestError("Email and password are required.");
+    }
 
-  if (existingUser) {
-    throw new ConflictError('Email already exists');
+    const user = await User.findOne({ email });
+    if (!user || !user.status) {
+      throw new UnAuthorizedError("Invalid credentials.");
+    }
+
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) {
+      throw new UnAuthorizedError("Invalid credentials.");
+    }
+
+    // ✅ Get role details for response
+    const roleDoc = await Role.findOne({ roleId: user.roleId });
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    res.status(200).json({
+      message: "Login successful",
+      accessToken,
+      refreshToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: {
+          id: roleDoc?.roleId || null,
+          name: roleDoc?.role_name || null,
+          permissions: roleDoc?.permissions || [],
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
   }
+};
 
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const user = new Model({ name, email, password: hashedPassword });
-  await user.save();
+// ==========================
+// REFRESH TOKEN
+// ==========================
+const refresh = async (req, res, next) => {
+  try {
+    const { refresh_token } = req.body;
+    if (!refresh_token) {
+      throw new BadRequestError("Refresh token is required.");
+    }
 
-  res.status(201).json({
-    message: 'User registered successfully',
-    role,
-  });
-});
+    let decoded;
+    try {
+      decoded = jwt.verify(refresh_token, process.env.JWT_REFRESH_SECRET);
+    } catch (err) {
+      throw new ForbiddenError("Invalid refresh token.");
+    }
 
-exports.login = catchAsync(async (req, res) => {
-  const { email, password, role } = req.body;
+    const user = await User.findById(decoded.id);
+    if (!user || !user.status) {
+      throw new UnAuthorizedError("User not found or inactive.");
+    }
 
-  if (!email || !password || !role) {
-    throw new BadRequestError('Email, password, and role are required');
+    const newAccessToken = generateAccessToken(user);
+    res.status(200).json({ accessToken: newAccessToken });
+  } catch (err) {
+    next(err);
   }
+};
 
-  const Model = getModel(role);
-  const user = await Model.findOne({ email });
-
-  if (!user) {
-    throw new NotFoundError('User not found');
-  }
-
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
-    throw new UnAuthorizedError('Invalid credentials');
-  }
-
-  const access_token = generateAccessToken(user, role);
-  const refresh_token = generateRefreshToken(user, role);
-
-  user.refresh_token = refresh_token;
-  const newUser = await user.save();
-
-  res.status(200).json({ status:"success", access_token, refresh_token,data:{_id:newUser?._id,name:newUser?.name,email:newUser?.email} });
-});
-
-exports.refreshToken = catchAsync(async (req, res) => {
-  const { refresh_token, role } = req.body;
-
-  if (!refresh_token || !role) {
-    throw new BadRequestError('Refresh token and role are required');
-  }
-
-  const Model = getModel(role);
-
-  const payload = jwt.verify(refresh_token, process.env.JWT_REFRESH_SECRET);
-  const user = await Model.findById(payload.id);
-
-  if (!user || user.refresh_token !== refresh_token) {
-    throw new ForbiddenError('Invalid or expired refresh token');
-  }
-
-  const newAccess_token = generateAccessToken(user, role);
-  const newRefresh_token = generateRefreshToken(user, role);
-
-  user.refresh_token = newRefresh_token;
-  await user.save();
-
-  res.status(200).json({ access_token: newAccess_token, refresh_token: newRefresh_token });
-});
+module.exports = {
+  login,
+  register,
+  refresh,
+};

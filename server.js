@@ -3,6 +3,7 @@ const dotenv = require('dotenv');
 const connectDB = require('./Config/db');
 // routes imports
 const authRoutes = require('./routes/authRoutes');
+const roleRoutes = require('./routes/roleRoutes')
 
 const swaggerDocs = require('./docs/swagger');
 const cors = require('cors');
@@ -22,6 +23,7 @@ app.use('/uploads', express.static('uploads'));
 app.use(morgan("dev"));
 
 app.use('/api/V1/auth', authRoutes);
+app.use('/api/V1/roles',roleRoutes);
 
 
 // swagger documentation 
