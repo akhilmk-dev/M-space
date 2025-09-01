@@ -3,7 +3,8 @@ const dotenv = require('dotenv');
 const connectDB = require('./Config/db');
 // routes imports
 const authRoutes = require('./routes/authRoutes');
-const roleRoutes = require('./routes/roleRoutes')
+const roleRoutes = require('./routes/roleRoutes');
+const courseRoutes = require('./routes/courseRoutes');
 
 const swaggerDocs = require('./docs/swagger');
 const cors = require('cors');
@@ -24,6 +25,7 @@ app.use(morgan("dev"));
 
 app.use('/api/V1/auth', authRoutes);
 app.use('/api/V1/roles',roleRoutes);
+app.use('/api/V1/courses',courseRoutes);
 
 
 // swagger documentation 

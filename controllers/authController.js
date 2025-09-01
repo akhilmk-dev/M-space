@@ -45,7 +45,7 @@ const register = async (req, res, next) => {
       name,
       email,
       phone,
-      roleId: roleDoc._id, // Use roleId in User schema
+      roleId: roleDoc._id, 
       passwordHash,
       status: true,
     });
