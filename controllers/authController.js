@@ -14,7 +14,6 @@ const {
 
 const { generateAccessToken, generateRefreshToken } = require("../utils/generateTokens");
 
-
 // ==========================
 // REGISTER
 // ==========================
@@ -26,14 +25,14 @@ const register = async (req, res, next) => {
       throw error;
     }
 
-    const { name, email, phone, password, role } = value; // `role` is the role name
+    const { name, email, phone, password, role } = value; 
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       throw new ConflictError("Email already in use.");
     }
 
-    // ✅ Find roleId by role_name
+    // Find roleId by role_name
     const roleDoc = await Role.findOne({ role_name: { $regex: `^${role}$`, $options: "i" } });
     if (!roleDoc) {
       throw new NotFoundError(`Role '${role}' not found.`);
@@ -52,7 +51,7 @@ const register = async (req, res, next) => {
 
     await newUser.save();
 
-    res.status(201).json({ status:success, message: "User registered successfully.",data:newUser });
+    res.status(201).json({ status:"success", message: "User registered successfully.",data:newUser });
   } catch (err) {
     next(err);
   }
@@ -63,24 +62,34 @@ const register = async (req, res, next) => {
 // ==========================
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body; 
 
-    if (!email || !password) {
-      throw new BadRequestError("Email and password are required.");
+    if (!email || !password || !role) {
+      throw new BadRequestError("Email, password, and role are required.");
     }
 
+    // Find role document by role
+    const roleDoc = await Role.findOne({ role_name: role });
+    if (!roleDoc) {
+      throw new BadRequestError("Invalid role specified.");
+    }
+
+    // Find user by email
     const user = await User.findOne({ email });
     if (!user || !user.status) {
       throw new UnAuthorizedError("Invalid credentials.");
     }
 
+    // Check if user's roleId matches roleDoc._id (or roleDoc.roleId if different)
+    if (user.roleId.toString() !== roleDoc._id.toString()) {
+      throw new UnAuthorizedError("Email is registered with a different role.");
+    }
+
+    // Verify password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       throw new UnAuthorizedError("Invalid credentials.");
     }
-
-    // ✅ Get role details for response
-    const roleDoc = await Role.findOne({ roleId: user.roleId });
 
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
@@ -95,9 +104,9 @@ const login = async (req, res, next) => {
         email: user.email,
         phone: user.phone,
         role: {
-          id: roleDoc?.roleId || null,
-          name: roleDoc?.role_name || null,
-          permissions: roleDoc?.permissions || [],
+          id: roleDoc.roleId,
+          name: roleDoc.role_name,
+          permissions: roleDoc.permissions,
         },
       },
     });

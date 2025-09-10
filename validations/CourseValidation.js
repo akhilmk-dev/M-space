@@ -1,14 +1,21 @@
-// models/Course.js
-const mongoose = require("mongoose");
+// validations/courseValidation.js
+const Joi = require("joi");
 
-const CourseSchema = new mongoose.Schema(
-  {
-    title: { type: String, required: true, trim: true },
-    description: { type: String, default: "" },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
-    status: { type: Boolean, default: true },
-  },
-  { timestamps: true }
-);
+const courseValidation = Joi.object({
+  title: Joi.string()
+    .min(3)
+    .max(100)
+    .required()
+    .messages({
+      "string.empty": "Title is required",
+      "string.min": "Title must be at least 3 characters",
+      "string.max": "Title cannot exceed 100 characters"
+    }),
+  description: Joi.string(),
+  createdBy: Joi.string().required().messages({
+    "string.empty": "CreatedBy (userId) is required"
+  }),
+  status: Joi.boolean().default(true)
+});
 
-module.exports = mongoose.model("Course", CourseSchema);
+module.exports = courseValidation;

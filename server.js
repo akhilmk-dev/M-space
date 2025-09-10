@@ -5,6 +5,10 @@ const connectDB = require('./Config/db');
 const authRoutes = require('./routes/authRoutes');
 const roleRoutes = require('./routes/roleRoutes');
 const courseRoutes = require('./routes/courseRoutes');
+const moduleRoutes = require('./routes/moduleRoutes');
+const courseOnlyRoutes = require('./routes/courseOnlyRoutes');
+const chapterRoutes = require('./routes/chapterRoutes');
+const lessonRoutes = require('./routes/lessonRoutes');
 
 const swaggerDocs = require('./docs/swagger');
 const cors = require('cors');
@@ -25,16 +29,17 @@ app.use(morgan("dev"));
 
 app.use('/api/V1/auth', authRoutes);
 app.use('/api/V1/roles',roleRoutes);
-app.use('/api/V1/courses',courseRoutes);
-
+app.use('/api/V1/modules', moduleRoutes);
+app.use('/api/V1/courses',courseOnlyRoutes);
+app.use('/api/V1/chapters',chapterRoutes);
+app.use('/api/V1/lessons',lessonRoutes);
+// app.use('/api/V1/courses',courseRoutes);
 
 // swagger documentation 
 swaggerDocs(app);
 
 // handle the error when none of the above routes works
 app.use(errorHandler);
-
-
 
 app.listen(process.env.PORT, () =>{
     console.log(clc.blueBright("────────────────────────────────────────────"));
