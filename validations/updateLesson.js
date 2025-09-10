@@ -14,6 +14,10 @@ const updateLessonBodySchema = Joi.object({
     "any.required": "ChapterId is required",
     "any.invalid": "Invalid ChapterId",
   }),
+  createdBy: Joi.string().custom(objectIdValidation).required().messages({
+    "any.required": "tutor is required",
+    "any.invalid": "Invalid tutor",
+  }),
   title: Joi.string().optional(),
   orderIndex: Joi.number().integer().min(1).optional(),
   contentType: Joi.string().valid("video", "file", "text").optional(),
