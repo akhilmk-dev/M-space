@@ -3,13 +3,14 @@ const router = express.Router();
 const courseController = require('../controllers/courseOnlyController');
 const validateMiddleware = require('../utils/validate');
 const courseValidation = require('../validations/CourseValidation');
+const { authenticate } = require('../middleware/authMiddleware');
 
 // CRUD routes
-router.post('/',validateMiddleware(courseValidation), courseController.createCourse);
-router.get('/', courseController.getAllCourses);
-router.get('/:courseId', courseController.getCourseById);
-router.put('/:courseId',validateMiddleware(courseValidation), courseController.updateCourse);
-router.delete('/:courseId', courseController.deleteCourse);
-router.get('/fullCourse/:courseId',courseController.geFullCourseById);
+router.post('/',authenticate,validateMiddleware(courseValidation), courseController.createCourse);
+router.get('/',authenticate, courseController.getAllCourses);
+router.get('/:courseId',authenticate, courseController.getCourseById);
+router.put('/:courseId',authenticate,validateMiddleware(courseValidation), courseController.updateCourse);
+router.delete('/:courseId',authenticate, courseController.deleteCourse);
+router.get('/fullCourse/:courseId',authenticate,courseController.geFullCourseById);
 
 module.exports = router;

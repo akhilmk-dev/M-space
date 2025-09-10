@@ -11,23 +11,23 @@ const {
 
 // Create Chapter
 exports.createChapter = catchAsync(async (req, res) => {
-    const { moduleId, title, orderIndex } = req.body;
-    // Check if module exists
-    const moduleExists = await Module.findById(moduleId);
-    if (!moduleExists) {
-      throw new NotFoundError("Module not found");
-    }
-  
-    // Check for existing chapter with same title in the module
-    const existingChapter = await Chapter.findOne({ moduleId, title });
-    if (existingChapter) {
-      throw new ConflictError("A chapter with this title already exists in this module.");
-    }
-  
-    const chapter = await Chapter.create({ moduleId, title, orderIndex });
-    res.status(201).json({ status: 'success', data: chapter });
-  });
-  
+  const { moduleId, title, orderIndex } = req.body;
+  // Check if module exists
+  const moduleExists = await Module.findById(moduleId);
+  if (!moduleExists) {
+    throw new NotFoundError("Module not found");
+  }
+
+  // Check for existing chapter with same title in the module
+  const existingChapter = await Chapter.findOne({ moduleId, title });
+  if (existingChapter) {
+    throw new ConflictError("A chapter with this title already exists in this module.");
+  }
+
+  const chapter = await Chapter.create({ moduleId, title, orderIndex });
+  res.status(201).json({ status: 'success', data: chapter });
+});
+
 
 // Get All Chapters
 exports.getAllChapters = catchAsync(async (req, res) => {
@@ -81,7 +81,7 @@ exports.updateChapter = catchAsync(async (req, res) => {
   Object.assign(chapter, updates);
   await chapter.save();
 
-  res.status(200).json({ status: 'success',message:"Chapter updated successfully", data: chapter });
+  res.status(200).json({ status: 'success', message: "Chapter updated successfully", data: chapter });
 });
 
 // Delete Chapter
@@ -93,3 +93,27 @@ exports.deleteChapter = catchAsync(async (req, res) => {
 
   res.status(200).json({ status: 'success', message: 'Chapter deleted successfully' });
 });
+
+// Get Chapters by Module ID
+exports.getChaptersByModuleId = catchAsync(async (req, res) => {
+  const { moduleId } = req.params;
+
+  if (!moduleId) {
+    throw new BadRequestError('Module ID is required');
+  }
+
+  const module = await Module.findById(moduleId);
+  if (!module) {
+    throw new NotFoundError('Module not found');
+  }
+
+  const chapters = await Chapter.find({ moduleId })
+    .sort({ orderIndex: 1 })
+    .populate('moduleId', 'title');
+
+  res.status(200).json({
+    status: 'success',
+    data: chapters,
+  });
+});
+

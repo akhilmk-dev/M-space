@@ -35,6 +35,12 @@ const lessonValidationSchema = Joi.object({
         title: Joi.string().trim().required().messages({
           "string.empty": "Lesson title is required",
         }),
+        createdBy: Joi.string().required().custom((value, helpers) => {
+          if (!mongoose.Types.ObjectId.isValid(value)) {
+            return helpers.message("Invalid tutor Id");
+          }
+          return value;
+        }),
         orderIndex: Joi.number().integer().required().messages({
           "number.base": "Order index must be a number",
           "any.required": "Order index is required",

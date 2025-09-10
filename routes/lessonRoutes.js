@@ -3,11 +3,12 @@ const { createLessons, deleteLesson, getLessonById, updateSingleLesson } = requi
 const validateMiddleware = require('../utils/validate');
 const { lessonValidationSchema } = require('../validations/lessonValidation');
 const { updateLessonBodySchema } = require('../validations/updateLesson');
+const { authenticate } = require('../middleware/authMiddleware');
 const router = express.Router();
 
-router.post('/',validateMiddleware(lessonValidationSchema),createLessons);
-router.put('/:lessonId',validateMiddleware(updateLessonBodySchema),updateSingleLesson);
-router.delete('/:lessonId', deleteLesson);
-router.get('/:lessonId', getLessonById);
+router.post('/',authenticate,validateMiddleware(lessonValidationSchema),createLessons);
+router.put('/:lessonId',authenticate,validateMiddleware(updateLessonBodySchema),updateSingleLesson);
+router.delete('/:lessonId',authenticate, deleteLesson);
+router.get('/:lessonId',authenticate, getLessonById);
 
 module.exports = router;

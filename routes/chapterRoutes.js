@@ -3,20 +3,24 @@ const router = express.Router();
 const chapterController = require('../controllers/chapterController');
 const validateMiddleware = require('../utils/validate');
 const createChapterSchema = require('../validations/chapterValidation');
+const { authenticate } = require('../middleware/authMiddleware');
 
 // Create Chapter
-router.post('/', validateMiddleware(createChapterSchema), chapterController.createChapter);
+router.post('/',authenticate, validateMiddleware(createChapterSchema), chapterController.createChapter);
 
 // Get All Chapters
-router.get('/', chapterController.getAllChapters);
+router.get('/',authenticate, chapterController.getAllChapters);
 
 // Get Chapter by ID
-router.get('/:chapterId', chapterController.getChapterById);
+router.get('/:chapterId',authenticate, chapterController.getChapterById);
 
 // Update Chapter
-router.put('/:chapterId',validateMiddleware(createChapterSchema), chapterController.updateChapter);
+router.put('/:chapterId',authenticate,validateMiddleware(createChapterSchema), chapterController.updateChapter);
 
 // Delete Chapter
-router.delete('/:chapterId', chapterController.deleteChapter);
+router.delete('/:chapterId',authenticate, chapterController.deleteChapter);
+
+// chapter by module
+router.get('/by-module/:moduleId',authenticate,chapterController.getChaptersByModuleId);
 
 module.exports = router;
