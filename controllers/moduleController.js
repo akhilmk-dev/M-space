@@ -77,6 +77,30 @@ exports.updateModule = catchAsync(async (req, res) => {
   res.status(200).json({ status: 'success',message:"Module updated successully", data: module });
 });
 
+// 🔹 Get Modules by Course ID
+exports.getModulesByCourseId = catchAsync(async (req, res) => {
+  const { courseId } = req.params;
+
+  if (!courseId) {
+    throw new BadRequestError('Course ID is required');
+  }
+
+  const course = await Course.findById(courseId);
+  if (!course) {
+    throw new NotFoundError('Course not found');
+  }
+
+  const modules = await Module.find({ courseId })
+    .sort({ orderIndex: 1 }) // optional: sort by orderIndex
+    .populate('courseId', 'title');
+
+  res.status(200).json({
+    status: 'success',
+    data: modules,
+  });
+});
+
+
 // 🔸 Delete Module
 exports.deleteModule = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
