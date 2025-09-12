@@ -295,7 +295,7 @@ const updateAssignment = async (req, res, next) => {
       assignment.deadline = deadline || assignment.deadline;
       if (processedFiles.length > 0) assignment.files = processedFiles;
       assignment.assignedTo = newStudentIds;
-      assignment.status = status || assignment.status;
+      assignment.status = "Active" || assignment.status;
   
       await assignment.save({ session });
   
