@@ -9,6 +9,10 @@ const moduleRoutes = require('./routes/moduleRoutes');
 const courseOnlyRoutes = require('./routes/courseOnlyRoutes');
 const chapterRoutes = require('./routes/chapterRoutes');
 const lessonRoutes = require('./routes/lessonRoutes');
+const userRoutes = require('./routes/userRoutes');
+const assignmentRoutes = require('./routes/assignmentRoutes');
+const assignmentSubmitRoutes = require('./routes/assignmentSubmissionRoutes');
+const commonRoutes = require('./routes/commonRoutes');
 
 const swaggerDocs = require('./docs/swagger');
 const cors = require('cors');
@@ -33,6 +37,10 @@ app.use('/api/V1/modules', moduleRoutes);
 app.use('/api/V1/courses',courseOnlyRoutes);
 app.use('/api/V1/chapters',chapterRoutes);
 app.use('/api/V1/lessons',lessonRoutes);
+app.use('/api/V1/users',userRoutes);
+app.use('/api/V1/assignments',assignmentRoutes);
+app.use('/api/V1/assignment-submissions',assignmentSubmitRoutes);
+app.use('/api/V1/common',commonRoutes);
 // app.use('/api/V1/courses',courseRoutes);
 
 // swagger documentation 

@@ -34,6 +34,15 @@ function errorHandler(err, req, res, next) {
     });
   }
 
+   // Custom Error: UnAuthorizedError
+   if (err.name === "UnAuthorizedError") {
+    return res.status(401).json({
+      status: "error",
+      name: "Unauthorized Error",
+      message: err.message,
+    });
+  }
+  
   // // Zod Validation Error
   // if (err.name === 'ZodError') {
   //   const formattedErrors = err.errors.reduce((acc, e) => {

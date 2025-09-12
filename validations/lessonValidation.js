@@ -53,7 +53,7 @@ const lessonValidationSchema = Joi.object({
           "string.uri": "Content URL must be a valid URL",
           "any.required": "Content URL is required",
         }),
-        duration: Joi.number().integer().min(1).required().messages({
+        duration: Joi.number().integer().min(1).optional().messages({
           "number.base": "Duration must be a number (seconds)",
           "any.required": "Duration is required",
         }),

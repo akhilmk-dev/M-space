@@ -1,5 +1,10 @@
 const mongoose = require("mongoose");
 
+const options = {
+  discriminatorKey: 'kind', // required for discriminators
+  timestamps: true,
+};
+
 const UserSchema = new mongoose.Schema(
   {
     name: {
@@ -10,7 +15,6 @@ const UserSchema = new mongoose.Schema(
     email: {
       type: String,
       required: true,
-      unique: true,
       lowercase: true,
     },
     phone: {
@@ -31,6 +35,7 @@ const UserSchema = new mongoose.Schema(
       default: true, 
     },
   },
+  options,
   { timestamps: true }
 );
 

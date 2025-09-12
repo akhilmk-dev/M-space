@@ -1,8 +1,9 @@
 const Joi = require('joi');
-
+const mongoose = require('mongoose');
 // =====================
 // Register Schema
 // =====================
+
 const registerSchema = Joi.object({
   name: Joi.string()
     .trim()
@@ -34,8 +35,8 @@ const registerSchema = Joi.object({
       'string.min': 'Password must be at least 6 characters',
       'any.required': 'Password is required',
     }),
-    
-    phone: Joi.string()
+
+  phone: Joi.string()
     .pattern(/^[0-9]{10,15}$/)
     .required()
     .messages({
@@ -51,6 +52,24 @@ const registerSchema = Joi.object({
       'any.only': 'Role must be one of Student, Tutor, or Admin',
       'string.empty': 'Role is required',
       'any.required': 'Role is required',
+    }),
+
+  courseId: Joi.string()
+    .when('role', {
+      is: 'Student',
+      then: Joi.string()
+        .required()
+        .custom((value, helpers) => {
+          if (!mongoose.Types.ObjectId.isValid(value)) {
+            return helpers.error('any.invalid');
+          }
+          return value;
+        }, 'ObjectId validation')
+        .messages({
+          'any.required': 'Course ID is required for students',
+          'any.invalid': 'Course ID must be a valid ObjectId',
+        }),
+      otherwise: Joi.forbidden(),
     }),
 });
 

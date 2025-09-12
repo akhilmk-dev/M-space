@@ -1,5 +1,4 @@
 const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const Role = require("../models/Roles");
 const Course = require('../models/Course')
@@ -13,14 +12,11 @@ const {
   NotFoundError,
 } = require("../utils/customErrors");
 
-const { generateAccessToken, generateRefreshToken } = require("../utils/generateTokens");
 const { default: mongoose } = require("mongoose");
 const Student = require("../models/Student");
 
-// ==========================
-// REGISTER
-// ==========================
-const register = async (req, res, next) => {
+
+const createUser = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -56,7 +52,7 @@ const register = async (req, res, next) => {
     );
 
     const user = newUser[0]; // since .create with array returns an array
-    let course = null
+
     // 5. If Student, validate and create student record
     if (role.toLowerCase() === "student") {
       if (!courseId) {
@@ -68,7 +64,6 @@ const register = async (req, res, next) => {
       }
 
       const courseExists = await Course.findById(courseId).session(session);
-      let course = courseExists;
       if (!courseExists) {
         throw new NotFoundError("Course not found.");
       }
@@ -93,108 +88,86 @@ const register = async (req, res, next) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        course,
+        course:courseExists,
         role,
       },
     });
   } catch (err) {
     // Something failed — rollback transaction
-    console.log(err)
     await session.abortTransaction();
     session.endSession();
     next(err);
   }
 };
 
-// ==========================
-// LOGIN
-// ==========================
-const login = async (req, res, next) => {
-  try {
-    const { email, password, role } = req.body; 
-
-    if (!email || !password || !role) {
-      throw new BadRequestError("Email, password, and role are required.");
-    }
-
-    // Find role document by role
-    const roleDoc = await Role.findOne({ role_name: role });
-    if (!roleDoc) {
-      throw new BadRequestError("Invalid role specified.");
-    }
-
-    // Find user by email
-    const user = await User.findOne({ email });
-    if (!user || !user.status) {
-      throw new UnAuthorizedError("Invalid credentials.");
-    }
-
-    // Check if user's roleId matches roleDoc._id (or roleDoc.roleId if different)
-    if (user.roleId.toString() !== roleDoc._id.toString()) {
-      throw new UnAuthorizedError("Invalid Email");
-    }
-
-    // Verify password
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
-    if (!isMatch) {
-      throw new UnAuthorizedError("Invalid credentials.");
-    }
-
-    const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
-
-    res.status(200).json({
-      message: "Login successful",
-      accessToken,
-      refreshToken,
-      user: {
+const getUsers = async (req, res, next) => {
+    try {
+      // ======== Query Params ========
+      const {
+        page = 1,
+        limit = 10,
+        search = "",
+        sortBy = "createdAt",
+        sortOrder = "desc",
+      } = req.query;
+  
+      const pageNumber = parseInt(page);
+      const pageSize = parseInt(limit);
+      const skip = (pageNumber - 1) * pageSize;
+  
+      // ======== Search Filter ========
+      const searchFilter = search
+        ? {
+            name: { $regex: search, $options: "i" }, 
+          }
+        : {};
+  
+      // ======== Sort Options ========
+      const sortOptions = {
+        [sortBy]: sortOrder.toLowerCase() === "asc" ? 1 : -1,
+      };
+  
+      // ======== Total Count ========
+      const total = await User.countDocuments(searchFilter);
+  
+      // ======== Fetch Users ========
+      const users = await User.find(searchFilter)
+        .populate("roleId", "role_name")
+        .select("name email phone status roleId createdAt updatedAt")
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(pageSize)
+        .lean();
+  
+      // ======== Format Result ========
+      const result = users.map(user => ({
         id: user._id,
         name: user.name,
         email: user.email,
         phone: user.phone,
-        role: {
-          id: roleDoc.roleId,
-          name: roleDoc.role_name,
-          permissions: roleDoc.permissions,
+        isActive: user.status,
+        role: user.roleId?.role_name || null,
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt,
+      }));
+  
+      res.status(200).json({
+        message: "Users fetched successfully",
+        pagination: {
+          total,
+          page: pageNumber,
+          limit: pageSize,
+          totalPages: Math.ceil(total / pageSize),
         },
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// ==========================
-// REFRESH TOKEN
-// ==========================
-const refresh = async (req, res, next) => {
-  try {
-    const { refresh_token } = req.body;
-    if (!refresh_token) {
-      throw new BadRequestError("Refresh token is required.");
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(refresh_token, process.env.JWT_REFRESH_SECRET);
+        data: result,
+      });
     } catch (err) {
-      throw new UnAuthorizedError("Invalid refresh token.");
+      next(err);
     }
-
-    const user = await User.findById(decoded.id);
-    if (!user || !user.status) {
-      throw new UnAuthorizedError("User not found or inactive.");
-    }
-
-    const newAccessToken = generateAccessToken(user);
-    res.status(200).json({ accessToken: newAccessToken });
-  } catch (err) {
-    next(err);
-  }
-};
-
-module.exports = {
-  login,
-  register,
-  refresh,
-};
+  };
+  
+  module.exports = {
+    getUsers,
+    createUser
+  };
+  

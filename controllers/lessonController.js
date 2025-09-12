@@ -6,6 +6,7 @@ const Course = require('../models/Course');
 const { NotFoundError,ConflictError } = require('../utils/customErrors');
 const removeReferencesGlobally = require('../helper/removeReferencesGlobally'); 
 
+
 exports.createLessons = async (req, res) => {
   try {
 
@@ -126,7 +127,10 @@ try {
     next(err);
 }
 };
+
+
   
+
 
 // exports.updateLessons = async (req, res, next) => {
 //   try {
