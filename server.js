@@ -19,6 +19,7 @@ const cors = require('cors');
 const clc = require('cli-color');
 const morgan = require('morgan');
 const errorHandler = require('./middleware/errorHandler');
+const updateExpiredAssignments = require('./cron/updateExpiredAssignments');
 dotenv.config();
 connectDB();
 
@@ -30,6 +31,7 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static('uploads'));
 app.use(morgan("dev"));
+updateExpiredAssignments();
 
 app.use('/api/V1/auth', authRoutes);
 app.use('/api/V1/roles',roleRoutes);
