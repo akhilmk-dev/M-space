@@ -3,8 +3,9 @@ const Lesson = require('../models/Lesson');
 const Chapter = require('../models/Chapter');
 const Module = require('../models/Module');
 const Course = require('../models/Course');
-const { NotFoundError,ConflictError } = require('../utils/customErrors');
+const { NotFoundError,ConflictError, ForbiddenError } = require('../utils/customErrors');
 const removeReferencesGlobally = require('../helper/removeReferencesGlobally'); 
+const User = require('../models/User');
 
 
 exports.createLessons = async (req, res) => {
@@ -52,10 +53,13 @@ exports.createLessons = async (req, res) => {
   }
 };
 
-exports.updateSingleLesson = async (req, res) => {
+exports.updateSingleLesson = async (req, res,next) => {
   try {
-
     const { lessonId } = req.params
+    const user = await User.findById(req.user.id).populate('roleId');
+    if(user?.roleId?.role_name == "Student"){
+      throw new ForbiddenError("Student can't update the lesson");
+    }
     const data = {
       createdBy:req.user.id,
       ...req.body
@@ -80,7 +84,7 @@ exports.updateSingleLesson = async (req, res) => {
     });
   } catch (err) {
     console.error("Update Lesson Error:", err);
-    return res.status(500).json({ error: "Internal Server Error" });
+    next(err);
   }
 };
 
