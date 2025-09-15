@@ -13,6 +13,7 @@ const userRoutes = require('./routes/userRoutes');
 const assignmentRoutes = require('./routes/assignmentRoutes');
 const assignmentSubmitRoutes = require('./routes/assignmentSubmissionRoutes');
 const commonRoutes = require('./routes/commonRoutes');
+const permissionRoutes = require('./routes/permissionRoutes');
 
 const swaggerDocs = require('./docs/swagger');
 const cors = require('cors');
@@ -35,6 +36,7 @@ updateExpiredAssignments();
 
 app.use('/api/V1/auth', authRoutes);
 app.use('/api/V1/roles',roleRoutes);
+app.use('/api/V1/permissions',permissionRoutes);
 app.use('/api/V1/modules', moduleRoutes);
 app.use('/api/V1/courses',courseOnlyRoutes);
 app.use('/api/V1/chapters',chapterRoutes);

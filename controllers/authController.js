@@ -16,6 +16,7 @@ const {
 const { generateAccessToken, generateRefreshToken } = require("../utils/generateTokens");
 const { default: mongoose } = require("mongoose");
 const Student = require("../models/Student");
+const Permission = require("../models/Permission");
 
 // ==========================
 // REGISTER
@@ -111,38 +112,42 @@ const register = async (req, res, next) => {
 // ==========================
 const login = async (req, res, next) => {
   try {
-    const { email, password, role } = req.body; 
+    const { email, password, role } = req.body;
 
     if (!email || !password || !role) {
       throw new BadRequestError("Email, password, and role are required.");
     }
 
-    // Find role document by role
+    // 1. Find role document by role name
     const roleDoc = await Role.findOne({ role_name: role });
     if (!roleDoc) {
       throw new BadRequestError("Invalid role specified.");
     }
 
-    // Find user by email
-    const user = await User.findOne({ email });
+    // 2. Find user by email and populate roleId
+    const user = await User.findOne({ email }).populate('roleId');
     if (!user || !user.status) {
       throw new UnAuthorizedError("Invalid credentials.");
     }
 
-    // Check if user's roleId matches roleDoc._id (or roleDoc.roleId if different)
-    if (user.roleId.toString() !== roleDoc._id.toString()) {
-      throw new UnAuthorizedError("Invalid Email");
+    // 3. Check role match (skip if Admin)
+    if (user.roleId?.role_name !== "Admin") {
+      if (user.roleId?._id?.toString() !== roleDoc._id.toString()) {
+        throw new UnAuthorizedError("Invalid Email");
+      }
     }
 
-    // Verify password
+    // 4. Check password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       throw new UnAuthorizedError("Invalid credentials.");
     }
 
+    // 5. Create tokens
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
 
+    // 6. Build user object
     const userObject = {
       id: user._id,
       name: user.name,
@@ -151,29 +156,44 @@ const login = async (req, res, next) => {
       role: {
         id: roleDoc.roleId,
         name: roleDoc.role_name,
-        permissions: roleDoc.permissions,
+        permissions: roleDoc.permissions, // default
       },
     };
 
-// Conditionally add courseId to the user object
+    // 7. Add courseId for students
     if (roleDoc.role_name === 'Student') {
-        const student = await Student.findOne({ userId: user._id });
-        if (student) {
-            userObject.courseId = student.courseId;
-            // You can add any other student-specific data here
-        }
+      const student = await Student.findOne({ userId: user._id });
+      if (student) {
+        userObject.courseId = student.courseId;
+      }
     }
 
-  res.status(200).json({
-    message: "Login successful",
-    accessToken,
-    refreshToken,
-    user: userObject,
-  });
+    // 8. For non-student/tutor roles, use roleId.permissions instead
+    if (roleDoc.role_name != 'Student' && roleDoc.role_name != 'Tutor') {
+      let permissions = [];
+
+      if (Array.isArray(roleDoc?.permissions) && roleDoc.permissions.length > 0) {
+        // Fetch permission documents by ID
+        permissions = await Permission.find({
+          _id: { $in: roleDoc.permissions }
+        });
+      }
+
+      userObject.permissions = permissions || [];
+    }
+
+    // 9. Send response
+    res.status(200).json({
+      message: "Login successful",
+      accessToken,
+      refreshToken,
+      user: userObject,
+    });
   } catch (err) {
     next(err);
   }
 };
+
 
 // ==========================
 // REFRESH TOKEN

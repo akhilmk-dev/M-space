@@ -34,8 +34,8 @@ function errorHandler(err, req, res, next) {
     });
   }
 
-   // Custom Error: UnAuthorizedError
-   if (err.name === "UnAuthorizedError") {
+  // Custom Error: UnAuthorizedError
+  if (err.name === "UnAuthorizedError") {
     return res.status(401).json({
       status: "error",
       name: "Unauthorized Error",
@@ -44,14 +44,14 @@ function errorHandler(err, req, res, next) {
   }
 
   // forbidden error
-     if (err.name === "ForbiddenError") {
+  if (err.name === "ForbiddenError") {
     return res.status(403).json({
       status: "error",
       name: "Forbidden Error",
       message: err.message,
     });
   }
-  
+
   // // Zod Validation Error
   // if (err.name === 'ZodError') {
   //   const formattedErrors = err.errors.reduce((acc, e) => {

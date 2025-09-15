@@ -56,6 +56,10 @@ exports.updateSingleLesson = async (req, res) => {
   try {
 
     const { lessonId } = req.params
+    const data = {
+      createdBy:req.user.id,
+      ...req.body
+    }
 
     // Check if lesson exists
     const lesson = await Lesson.findById(lessonId);
@@ -66,7 +70,7 @@ exports.updateSingleLesson = async (req, res) => {
     // Update lesson
     const updatedLesson = await Lesson.findByIdAndUpdate(
       lessonId,
-      { $set: req.body },
+      { $set: data },
       { new: true, runValidators: true }
     );
 

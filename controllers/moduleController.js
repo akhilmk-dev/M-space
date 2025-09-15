@@ -10,6 +10,7 @@ const {
 const Lesson = require('../models/Lesson');
 const LessonCompletion = require('../models/LessonCompletion');
 const Chapter = require('../models/Chapter');
+const User = require('../models/User');
 
 // 🔸 Create Module
 exports.createModule = catchAsync(async (req, res) => {
@@ -36,13 +37,68 @@ exports.getAllModules = catchAsync(async (req, res) => {
 });
 
 // Get Module by ID
+// exports.getModuleById = catchAsync(async (req, res) => {
+//   const { moduleId } = req.params;
+//   const module = await Module.findById(moduleId).populate('courseId', 'title');
+
+//   if (!module) throw new NotFoundError('Module not found');
+
+//   res.status(200).json({ status: 'success', data: module });
+// });
+
 exports.getModuleById = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
+  const user = await User.findById(req.user.id).populate('roleId')
+  // 1. Find the module and its course
   const module = await Module.findById(moduleId).populate('courseId', 'title');
-
   if (!module) throw new NotFoundError('Module not found');
 
-  res.status(200).json({ status: 'success', data: module });
+  // 2. Find all chapters linked to this module
+  const chapters = await Chapter.find({ moduleId }).lean();
+
+  let studentCompletedLessons = [];
+
+  // 3. If user is a student, fetch completed lessons
+  if (user?.roleId?.role_name == 'Student') {
+    studentCompletedLessons = await LessonCompletion.find({ studentId: user._id })
+      .select('lessonId')
+      .lean();
+
+    // Convert to Set for faster lookup
+    studentCompletedLessons = new Set(studentCompletedLessons.map(lc => lc.lessonId.toString()));
+  }
+
+  // 4. For each chapter, fetch lessons and add completion status
+  const chaptersWithLessons = await Promise.all(
+    chapters.map(async (chapter) => {
+      const lessons = await Lesson.find({ chapterId: chapter._id }).lean();
+
+      const lessonsWithCompletion = lessons.map((lesson) => ({
+        ...lesson,
+        isCompleted:
+          user?.roleId?.role_name === 'Student'
+            ? studentCompletedLessons.has(lesson._id.toString())
+            : undefined
+      }));
+
+      return {
+        ...chapter,
+        lessons: lessonsWithCompletion
+      };
+    })
+  );
+
+  // 5. Prepare final module data
+  const moduleData = {
+    ...module.toObject(),
+    chapters: chaptersWithLessons
+  };
+
+  // 6. Send response
+  res.status(200).json({
+    status: 'success',
+    data: moduleData
+  });
 });
 
 // Update Module
@@ -208,7 +264,7 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
 });
 
 
-// 🔸 Delete Module
+// Delete Module
 exports.deleteModule = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
   const module = await Module.findById(moduleId);
