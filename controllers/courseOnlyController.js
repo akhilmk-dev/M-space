@@ -1,7 +1,9 @@
+const checkDependencies = require('../helper/checkDependencies');
 const Chapter = require('../models/Chapter');
 const Course = require('../models/Course');
 const Lesson = require('../models/Lesson');
 const Module = require('../models/Module');
+const User = require('../models/User');
 const catchAsync = require('../utils/catchAsync');
 
 const {
@@ -9,18 +11,21 @@ const {
   ConflictError,
   BadRequestError,
   EmptyRequestBodyError,
+  InternalServerError,
+  ForbiddenError,
 } = require('../utils/customErrors');
 
 // Create Course
 exports.createCourse = catchAsync(async (req, res) => {
-  const { title, description, createdBy, status } = req.body;
-
-  const existingCourse = await Course.findOne({ title });
+  const { title, description, status } = req.body;
+  const user = await User.findById(req.user.id).populate('roleId');
+  const role = user?.roleId?.role_name?.toLowerCase();
+  if( role == "student" || role == "tutor")throw new ForbiddenError("user doesn't have permission to create course")
+  const existingCourse = await Course.findOne({ title: { $regex: new RegExp(`^${title}$`, "i") } });
   if (existingCourse) {
     throw new ConflictError("A course with this title already exists.");
   }
-
-  const course = await Course.create({ title, description, createdBy, status });
+  const course = await Course.create({ title, description, createdBy:req.user.id, status });
   res.status(201).json({ status: 'success', data: course });
 });
 
@@ -43,15 +48,15 @@ exports.updateCourse = catchAsync(async (req, res) => {
   const { courseId } = req.params;
   const updates = req.body;
 
-  if (!Object.keys(updates).length) {
-    throw new EmptyRequestBodyError();
-  }
-
   const course = await Course.findById(courseId);
   if (!course) throw new NotFoundError('Course not found');
 
+  const user = await User.findById(req.user.id).populate('roleId');
+  const role = user?.roleId?.role_name?.toLowerCase();
+  if( role == "student" || role == "tutor")throw new ForbiddenError("user doesn't have permission to update course")
+
   if (updates.title) {
-    const titleConflict = await Course.findOne({ title: updates.title, _id: { $ne: courseId } });
+    const titleConflict = await Course.findOne({ title: { $regex: new RegExp(`^${updates.title}$`, "i") }, _id: { $ne: courseId } });
     if (titleConflict) throw new ConflictError('Another course with this title already exists');
   }
 
@@ -63,11 +68,14 @@ exports.updateCourse = catchAsync(async (req, res) => {
 
 // Delete Course
 exports.deleteCourse = catchAsync(async (req, res) => {
+  const user = await User.findById(req.user.id).populate('roleId');
+  const role = user?.roleId?.role_name?.toLowerCase();
+  if( role == "student" )throw new ForbiddenError("user doesn't have permission to delete course")
   const { courseId } = req.params;
-  const course = await Course.findByIdAndDelete(courseId);
-
-  if (!course) throw new NotFoundError('Course not found');
-
+  const course = await Course.findById(courseId);
+  if (!course) throw new NotFoundError("Course not found");
+  await checkDependencies("Course",courseId, ["courseId"]);
+  const deletedCourse = await Course.findByIdAndDelete(courseId);
   res.status(200).json({ status: 'success', message: 'Course deleted successfully' });
 });
 

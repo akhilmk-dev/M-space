@@ -1,8 +1,7 @@
 const Joi = require("joi");
 const mongoose = require("mongoose");
 
-const validateLessonCompletion = (data) => {
-  const schema = Joi.object({
+const validateLessonCompletion = Joi.object({
     studentId: Joi.string()
       .required()
       .custom((value, helpers) => {
@@ -21,8 +20,5 @@ const validateLessonCompletion = (data) => {
       }),
     isCompleted: Joi.boolean().optional(),
   });
-
-  return schema.validate(data);
-};
 
 module.exports = validateLessonCompletion;

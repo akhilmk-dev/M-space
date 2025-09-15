@@ -1,6 +1,8 @@
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const catchAsync = require('../utils/catchAsync');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const LessonCompletion = require('../models/LessonCompletion');
+
 
 exports.getImageUrl = catchAsync(async (req, res) => {
     const s3 = new S3Client({
@@ -37,4 +39,26 @@ exports.getImageUrl = catchAsync(async (req, res) => {
       console.error('Error generating signed URL:', err);
       res.status(500).json({ error: 'Failed to generate pre-signed URL' });
     }
-  });
+});
+
+exports.markLessonCompletion = async (req, res, next) => {
+  try {
+    // Automatically use logged-in student ID
+    const studentId = req.user?.id;
+    const { lessonId, isCompleted = true } = req.body;
+
+    // Upsert (create or update) lesson completion record
+    const updatedRecord = await LessonCompletion.findOneAndUpdate(
+      { studentId, lessonId },
+      { isCompleted },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    res.status(200).json({
+      message: `Lesson marked as ${isCompleted ? "completed" : "not completed"}`,
+      data: updatedRecord,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

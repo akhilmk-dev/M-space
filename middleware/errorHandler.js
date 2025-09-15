@@ -42,6 +42,15 @@ function errorHandler(err, req, res, next) {
       message: err.message,
     });
   }
+
+  // forbidden error
+     if (err.name === "ForbiddenError") {
+    return res.status(403).json({
+      status: "error",
+      name: "Forbidden Error",
+      message: err.message,
+    });
+  }
   
   // // Zod Validation Error
   // if (err.name === 'ZodError') {

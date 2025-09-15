@@ -82,7 +82,7 @@ const register = async (req, res, next) => {
         { session }
       );
     }
-
+    
     // commit transaction
     await session.commitTransaction();
     session.endSession();
@@ -143,22 +143,33 @@ const login = async (req, res, next) => {
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
 
-    res.status(200).json({
-      message: "Login successful",
-      accessToken,
-      refreshToken,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: {
-          id: roleDoc.roleId,
-          name: roleDoc.role_name,
-          permissions: roleDoc.permissions,
-        },
+    const userObject = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: {
+        id: roleDoc.roleId,
+        name: roleDoc.role_name,
+        permissions: roleDoc.permissions,
       },
-    });
+    };
+
+// Conditionally add courseId to the user object
+    if (roleDoc.role_name === 'Student') {
+        const student = await Student.findOne({ userId: user._id });
+        if (student) {
+            userObject.courseId = student.courseId;
+            // You can add any other student-specific data here
+        }
+    }
+
+  res.status(200).json({
+    message: "Login successful",
+    accessToken,
+    refreshToken,
+    user: userObject,
+  });
   } catch (err) {
     next(err);
   }
