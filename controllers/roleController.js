@@ -48,9 +48,8 @@ const getAllRoles = async (req, res, next) => {
 // GET role by ID
 const getRoleById = async (req, res, next) => {
   try {
-    const { roleId } = req.params;
-
-    const role = await Role.findOne({ roleId });
+    const { id } = req.params;
+    const role = await Role.findById(id);
     if (!role) throw new NotFoundError("Role not found.");
 
     res.json({ data: role });
@@ -64,26 +63,20 @@ const updateRole = async (req, res, next) => {
   try {
     const { roleId } = req.params;
 
-    const { error, value } = roleValidationSchema.validate(req.body, { abortEarly: false });
-    if (error) {
-      error.isJoi = true;
-      throw error;
-    }
-
-    const role = await Role.findOne({ roleId });
+    const role = await Role.findById( roleId );
     if (!role) throw new NotFoundError("Role not found.");
 
     // Prevent duplicate role name (case-insensitive), except for current record
     const existingName = await Role.findOne({
-      role_name: { $regex: `^${value.role_name}$`, $options: 'i' },
+      role_name: { $regex: `^${req.body.role_name}$`, $options: 'i' },
       _id: { $ne: role._id },
     });
     if (existingName) {
       throw new ConflictError("Role name already exists.");
     }
 
-    role.role_name = value.role_name;
-    role.permissions = value.permissions;
+    role.role_name = req.body.role_name;
+    role.permissions = req.body.permissions;
     await role.save();
 
     res.json({ message: "Role updated successfully.", data: role });
@@ -95,13 +88,13 @@ const updateRole = async (req, res, next) => {
 // DELETE role
 const deleteRole = async (req, res, next) => {
   try {
-    const { roleId } = req.params;
+    const { id } = req.params;
 
-    if (!isValidObjectId(roleId)) {
+    if (!isValidObjectId(id)) {
       throw new NotFoundError("Invalid Role ID.");
     }
 
-    const role = await Role.findById(roleId);
+    const role = await Role.findById(id);
     if (!role) throw new NotFoundError("Role not found.");
 
     // Protected names (admin, tutor, student) — case-insensitive match
@@ -110,12 +103,12 @@ const deleteRole = async (req, res, next) => {
     }
 
     // Check for dependencies in User collection
-    const isUsed = await User.exists({ roleId: role.roleId });
+    const isUsed = await User.exists({ roleId: role._id });
     if (isUsed) {
       throw new BadRequestError("Role is in use and cannot be deleted.");
     }
 
-    await Role.deleteOne({ _id: roleId });
+    await Role.deleteOne({ _id: id });
 
     res.json({ message: "Role deleted successfully." });
   } catch (err) {

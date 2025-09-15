@@ -179,7 +179,7 @@ const login = async (req, res, next) => {
         });
       }
 
-      userObject.permissions = permissions || [];
+      userObject.role.permissions = permissions || [];
     }
 
     // 9. Send response

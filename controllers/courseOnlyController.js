@@ -47,10 +47,8 @@ exports.getCourseById = catchAsync(async (req, res) => {
 exports.updateCourse = catchAsync(async (req, res) => {
   const { courseId } = req.params;
   const updates = req.body;
-
   const course = await Course.findById(courseId);
   if (!course) throw new NotFoundError('Course not found');
-
   const user = await User.findById(req.user.id).populate('roleId');
   const role = user?.roleId?.role_name?.toLowerCase();
   if( role == "student" || role == "tutor")throw new ForbiddenError("user doesn't have permission to update course")
@@ -59,10 +57,8 @@ exports.updateCourse = catchAsync(async (req, res) => {
     const titleConflict = await Course.findOne({ title: { $regex: new RegExp(`^${updates.title}$`, "i") }, _id: { $ne: courseId } });
     if (titleConflict) throw new ConflictError('Another course with this title already exists');
   }
-
   Object.assign(course, updates);
   await course.save();
-
   res.status(200).json({ status: 'success', data: course });
 });
 

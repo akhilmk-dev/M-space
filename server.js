@@ -14,6 +14,7 @@ const assignmentRoutes = require('./routes/assignmentRoutes');
 const assignmentSubmitRoutes = require('./routes/assignmentSubmissionRoutes');
 const commonRoutes = require('./routes/commonRoutes');
 const permissionRoutes = require('./routes/permissionRoutes');
+const studentRoutes = require('./routes/studentRoutes');
 
 const swaggerDocs = require('./docs/swagger');
 const cors = require('cors');
@@ -45,6 +46,7 @@ app.use('/api/V1/users',userRoutes);
 app.use('/api/V1/assignments',assignmentRoutes);
 app.use('/api/V1/assignment-submissions',assignmentSubmitRoutes);
 app.use('/api/V1/common',commonRoutes);
+app.use('/api/V1/students',studentRoutes);
 // app.use('/api/V1/courses',courseRoutes);
 
 // swagger documentation 
