@@ -1,5 +1,5 @@
 const express = require('express');
-const { createLessons, deleteLesson, getLessonById, updateSingleLesson } = require('../controllers/lessonController');
+const { createLessons, deleteLesson, getLessonById, updateSingleLesson, getLessonsByCourseId } = require('../controllers/lessonController');
 const validateMiddleware = require('../utils/validate');
 const { lessonValidationSchema } = require('../validations/lessonValidation');
 const { updateLessonBodySchema } = require('../validations/updateLesson');
@@ -10,5 +10,6 @@ router.post('/',authenticate,validateMiddleware(lessonValidationSchema),createLe
 router.put('/:lessonId',authenticate,validateMiddleware(updateLessonBodySchema),updateSingleLesson);
 router.delete('/:lessonId',authenticate, deleteLesson);
 router.get('/:lessonId',authenticate, getLessonById);
+router.get('/by-course/:courseId',authenticate,getLessonsByCourseId);
 
 module.exports = router;

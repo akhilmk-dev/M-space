@@ -136,8 +136,35 @@ try {
 }
 };
 
+exports.getLessonsByCourseId = async (req, res, next) => {
+  try {
+    const { courseId } = req.params;
 
-  
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      throw new NotFoundError("Invalid course ID");
+    }
+
+    // Step 1: Find all modules in the course
+    const modules = await Module.find({ courseId }).select('_id');
+    const moduleIds = modules.map((mod) => mod._id);
+
+    // Step 2: Find all chapters in those modules
+    const chapters = await Chapter.find({ moduleId: { $in: moduleIds } }).select('_id');
+    const chapterIds = chapters.map((chap) => chap._id);
+
+    // Step 3: Find all lessons in those chapters
+    const lessons = await Lesson.find({ chapterId: { $in: chapterIds } }).select('title _id');
+
+    res.status(200).json({
+      success: true,
+      count: lessons.length,
+      data: lessons,
+    });
+  } catch (err) {
+    console.error("Error fetching lessons by course:", err);
+    next(err);
+  }
+};
 
 
 // exports.updateLessons = async (req, res, next) => {
