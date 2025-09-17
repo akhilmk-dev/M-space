@@ -6,8 +6,7 @@ const { createUser, getUsers } = require('../controllers/userController');
 const { authenticate } = require('../middleware/authMiddleware');
 const { registerSchema } = require('../validations/authValidation');
 
-router.post('/',authenticate,validateMiddleware(registerSchema), createUser);
+router.post('/',authenticate, createUser);
 router.get('/',authenticate, getUsers);
-
 
 module.exports = router;

@@ -21,7 +21,7 @@ const createUser = async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const { name, email, phone, password, role, courseId } = req.body;
+    const { name, email, phone, password, roleId, courseId } = req.body;
 
     // 1. Check if user already exists
     const existingUser = await User.findOne({ email }).session(session);
@@ -29,10 +29,14 @@ const createUser = async (req, res, next) => {
       throw new ConflictError("Email already in use.");
     }
 
-    // 2. Find role
-    const roleDoc = await Role.findOne({ role_name: role }).session(session);
+    // 2. Validate roleId
+    if (!mongoose.Types.ObjectId.isValid(roleId)) {
+      throw new BadRequestError("Invalid roleId format.");
+    }
+
+    const roleDoc = await Role.findById(roleId).session(session);
     if (!roleDoc) {
-      throw new BadRequestError(`Role '${role}' not found.`);
+      throw new BadRequestError("Role not found.");
     }
 
     // 3. Hash password
@@ -51,10 +55,11 @@ const createUser = async (req, res, next) => {
       { session }
     );
 
-    const user = newUser[0]; // since .create with array returns an array
+    const user = newUser[0];
 
-    // 5. If Student, validate and create student record
-    if (role.toLowerCase() === "student") {
+    // 5. If role is 'student', proceed to create Student record
+    const roleName = roleDoc.role_name.toLowerCase();
+    if (roleName === "student") {
       if (!courseId) {
         throw new BadRequestError("Course ID is required for students.");
       }
@@ -83,17 +88,16 @@ const createUser = async (req, res, next) => {
     session.endSession();
 
     res.status(201).json({
-      message: `${role} registered successfully.`,
+      message: `${roleDoc.role_name} registered successfully.`,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        course:courseExists,
-        role,
+        role: roleDoc.role_name,
+        course: roleName === "student" ? courseExists : undefined,
       },
     });
   } catch (err) {
-    // Something failed — rollback transaction
     await session.abortTransaction();
     session.endSession();
     next(err);
@@ -146,28 +150,29 @@ const getUsers = async (req, res, next) => {
         email: user.email,
         phone: user.phone,
         isActive: user.status,
-        role: user.roleId?.role_name || null,
+        role: {
+          role_name: user.roleId?.role_name || null,
+          _id: user.roleId._id
+        },
         createdAt: user.createdAt,
         updatedAt: user.updatedAt,
       }));
   
       res.status(200).json({
         message: "Users fetched successfully",
-        pagination: {
-          total,
-          page: pageNumber,
-          limit: pageSize,
-          totalPages: Math.ceil(total / pageSize),
-        },
+        total,
+        page: pageNumber,
+        limit: pageSize,
+        totalPages: Math.ceil(total / pageSize),
         data: result,
       });
     } catch (err) {
       next(err);
     }
-  };
+};
   
-  module.exports = {
+module.exports = {
     getUsers,
     createUser
-  };
+};
   

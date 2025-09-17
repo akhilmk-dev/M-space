@@ -31,7 +31,7 @@ exports.createCourse = catchAsync(async (req, res) => {
 
 // Get All Courses
 exports.getAllCourses = catchAsync(async (req, res) => {
-  const courses = await Course.find().populate('createdBy', 'name email');
+  const courses = await Course.find().populate('createdBy', 'name _id email');
   res.status(200).json({ status: 'success', data: courses });
 });
 

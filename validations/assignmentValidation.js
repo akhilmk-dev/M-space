@@ -52,13 +52,15 @@ const createAssignmentSchema = Joi.object({
   files: Joi.array().items(fileSchema).default([]),
 
   assignedTo: Joi.array()
-    .items(
-      Joi.string()
-        .valid('all')
-        .custom(objectIdValidator, 'ObjectId validation')
-        .messages({ 'any.invalid': 'Invalid student ID format' })
-    )
-    .default([]),
+  .items(
+    Joi.alternatives().try(
+      Joi.string().valid('all'),
+      Joi.string().custom(objectIdValidator, 'ObjectId validation')
+    ).messages({
+      'any.invalid': 'Invalid student ID format'
+    })
+  )
+  .default([]),
 
   status: Joi.string()
     .valid('Active', 'Closed')

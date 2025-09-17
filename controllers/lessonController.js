@@ -7,7 +7,6 @@ const { NotFoundError,ConflictError, ForbiddenError } = require('../utils/custom
 const removeReferencesGlobally = require('../helper/removeReferencesGlobally'); 
 const User = require('../models/User');
 
-
 exports.createLessons = async (req, res) => {
   try {
 
@@ -111,7 +110,7 @@ exports.deleteLesson = async (req, res, next) => {
     } catch (err) {
       next(err);
     }
-  };
+};
 
 exports.getLessonById = async (req, res, next) => {
 try {
@@ -165,7 +164,6 @@ exports.getLessonsByCourseId = async (req, res, next) => {
     next(err);
   }
 };
-
 
 // exports.updateLessons = async (req, res, next) => {
 //   try {
