@@ -11,11 +11,12 @@ const Lesson = require('../models/Lesson');
 const LessonCompletion = require('../models/LessonCompletion');
 const Chapter = require('../models/Chapter');
 const User = require('../models/User');
+const checkDependencies = require('../helper/checkDependencies');
 
-// 🔸 Create Module
+//  Create Module
 exports.createModule = catchAsync(async (req, res) => {
   const { title, orderIndex, courseId } = req.body;
-
+  
   const course = await Course.findById(courseId);
   if (!course) throw new NotFoundError("course does not exist");
 
@@ -26,15 +27,54 @@ exports.createModule = catchAsync(async (req, res) => {
   const module = await Module.create({ courseId, title, orderIndex });
   res.status(201).json({
     status: 'success',
-    data: module,
+    data: {courseId:course,title:module?.title,orderIndex:module?.orderIndex,_id:module._id},
   });
 });
 
 // Get All Modules
 exports.getAllModules = catchAsync(async (req, res) => {
-  const modules = await Module.find().populate('courseId', 'title');
-  res.status(200).json({ status: 'success', data: modules });
+  // 1. Pagination
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  // 2. Search
+  const search = req.query.search || '';
+  const searchRegex = new RegExp(search, 'i');
+
+  // 3. Sort
+  let sort = { createdAt: -1 }; // Default sort
+  if (req.query.sortBy) {
+    const [field, order] = req.query.sortBy.split(':');
+    sort = { [field]: order === 'asc' ? 1 : -1 };
+  }
+
+  // 4. Build query
+  const query = {
+    title: { $regex: searchRegex }
+  };
+
+  // 5. Total count
+  const total = await Module.countDocuments(query);
+
+  // 6. Fetch data
+  const modules = await Module.find(query)
+    .populate('courseId', 'title')
+    .sort(sort)
+    .skip(skip)
+    .limit(limit);
+
+  // 7. Response
+  res.status(200).json({
+    status: 'success',
+    page,
+    limit,
+    total,
+    totalPages: Math.ceil(total / limit),
+    data: modules,
+  });
 });
+
 
 // Get Module by ID
 // exports.getModuleById = catchAsync(async (req, res) => {
@@ -112,16 +152,17 @@ exports.updateModule = catchAsync(async (req, res) => {
 
   const module = await Module.findById(moduleId);
   if (!module) throw new NotFoundError('Module not found');
-
+  let course= null;
   if (updates.courseId) {
     const courseExists = await Course.findById(updates.courseId);
+    course = courseExists;
     if (!courseExists) throw new NotFoundError('course does not exist');
   }
 
   if (updates.title) {
     const duplicate = await Module.findOne({
       _id: { $ne: moduleId },
-      courseId: updates.courseId || module.courseId,
+      courseId: course,
       title: updates.title,
     });
 
@@ -133,7 +174,7 @@ exports.updateModule = catchAsync(async (req, res) => {
   Object.assign(module, updates);
   await module.save();
 
-  res.status(200).json({ status: 'success',message:"Module updated successully", data: module });
+  res.status(200).json({ status: 'success',message:"Module updated successully", data: {...module,courseId:course} });
 });
 
 // Get Modules by Course ID

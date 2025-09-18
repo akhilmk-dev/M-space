@@ -211,6 +211,7 @@ const getAssignmentById = async (req, res, next) => {
     // 4. Strip submissions to only keep lessonId
     const strippedSubmissions = submissions.map(sub => ({
       _id: sub._id,
+      userId:sub.studentId,
       assignmentId: sub.assignmentId,
       lessonId: sub.lessonId?._id,
       createdAt: sub.createdAt,

@@ -31,9 +31,51 @@ exports.createCourse = catchAsync(async (req, res) => {
 
 // Get All Courses
 exports.getAllCourses = catchAsync(async (req, res) => {
-  const courses = await Course.find().populate('createdBy', 'name _id email');
-  res.status(200).json({ status: 'success', data: courses });
+  // 1. Pagination
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  // 2. Search
+  const search = req.query.search || '';
+  const searchRegex = new RegExp(search, 'i');
+
+  // 3. Sort parsing from `sortBy=field:direction`
+  let sortField = 'createdAt';
+  let sortOrder = -1; // default: descending
+
+  if (req.query.sortBy) {
+    const [field, order] = req.query.sortBy.split(':');
+    sortField = field || 'createdAt';
+    sortOrder = order === 'asc' ? 1 : -1;
+  }
+
+  // 4. Query
+  const query = {
+    title: { $regex: searchRegex }
+  };
+
+  // 5. Count
+  const totalCourses = await Course.countDocuments(query);
+
+  // 6. Fetch
+  const courses = await Course.find(query)
+    .populate('createdBy', 'name _id email')
+    .sort({ [sortField]: sortOrder })
+    .skip(skip)
+    .limit(limit);
+
+  // 7. Response
+  res.status(200).json({
+    status: 'success',
+    page,
+    limit,
+    total: totalCourses,
+    totalPages: Math.ceil(totalCourses / limit),
+    data: courses
+  });
 });
+
 
 // Get Course by ID
 exports.getCourseById = catchAsync(async (req, res) => {

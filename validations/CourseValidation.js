@@ -12,9 +12,6 @@ const courseValidation = Joi.object({
       "string.max": "Title cannot exceed 100 characters"
     }),
   description: Joi.string(),
-  createdBy: Joi.string().required().messages({
-    "string.empty": "CreatedBy (userId) is required"
-  }),
   status: Joi.boolean().default(true)
 });
 
