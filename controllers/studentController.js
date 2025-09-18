@@ -305,7 +305,7 @@ const getStudentsByCourseId = async (req, res, next) => {
       .lean();
 
     const result = students.map(student => ({
-      userId: student.userId?._id,
+      _id: student.userId?._id,
       name: student.userId?.name,
     }));
 
