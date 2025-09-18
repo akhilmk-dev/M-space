@@ -11,6 +11,7 @@ const {
   ConflictError,
   ForbiddenError,
   NotFoundError,
+  InternalServerError,
 } = require("../utils/customErrors");
 
 const { generateAccessToken, generateRefreshToken } = require("../utils/generateTokens");
@@ -127,20 +128,20 @@ const login = async (req, res, next) => {
     // 2. Find user by email and populate roleId
     const user = await User.findOne({ email }).populate('roleId');
     if (!user || !user.status) {
-      throw new UnAuthorizedError("Invalid credentials.");
+      throw new InternalServerError("Invalid credentials.");
     }
 
     // 3. Check role match (skip if Admin)
     if (user.roleId?.role_name !== "Admin") {
       if (user.roleId?._id?.toString() !== roleDoc._id.toString()) {
-        throw new UnAuthorizedError("Invalid Email");
+        throw new InternalServerError("Invalid Email");
       }
     }
 
     // 4. Check password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
-      throw new UnAuthorizedError("Invalid credentials.");
+      throw new InternalServerError("Invalid credentials.");
     }
 
     // 5. Create tokens
@@ -193,7 +194,6 @@ const login = async (req, res, next) => {
     next(err);
   }
 };
-
 
 // ==========================
 // REFRESH TOKEN

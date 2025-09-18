@@ -28,7 +28,7 @@ const { deleteFileFromS3 } = require("../utils/deleteFileFromS3");
 //     return uploaded;
 // };
 
-const processAssignmentFiles = async (files = []) => {
+const processAssignmentFiles = async (files = [],existingFiles=[]) => {
   const uploaded = [];
 
   for (const file of files) {
@@ -37,10 +37,11 @@ const processAssignmentFiles = async (files = []) => {
 
     // Case 1: Already uploaded file (URL passed inside base64)
     if (base64.startsWith("http")) {
+      const existingFile = existingFiles.find(f => f.fileUrl == base64);
       uploaded.push({
         name,
         fileUrl: base64,
-        size: null // you won't have size for existing files unless stored earlier
+        size: existingFile ? existingFile.size : null, 
       });
     } 
     // Case 2: New file (real base64, needs upload)
@@ -167,35 +168,66 @@ const getAllAssignments = async (req, res, next) => {
 };
 
 const getAssignmentById = async (req, res, next) => {
-    try {
-        const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-        // 1. Get the assignment
-        const assignment = await Assignment.findById(id)
-            .populate("createdBy", "name email")
-            .populate("assignedTo", "name email");
+    // 1. Get the assignment
+    const assignment = await Assignment.findById(id)
+      .populate("createdBy", "name email")
+      .populate("assignedTo", "name email");
 
-        if (!assignment) {
-            return res.status(404).json({
-                status: "error",
-                message: "Assignment not found",
-            });
-        }
-
-        // 2. Get all submissions related to this assignment
-        const submissions = await AssignmentSubmission.find({ assignmentId: id })
-            .populate("studentId", "name email")
-            .populate("lessonId", "title")
-            .sort({ createdAt: -1 });
-
-        res.status(200).json({
-            status: "success",
-            assignment,
-            submissions,
-        });
-    } catch (err) {
-        next(err);
+    if (!assignment) {
+      return res.status(404).json({
+        status: "error",
+        message: "Assignment not found",
+      });
     }
+
+    // 2. Get submissions — ONLY populate lessonId
+    const submissions = await AssignmentSubmission.find({ assignmentId: id })
+      .populate({
+        path: "lessonId",
+        select: "title chapterId", // keep chapterId for courseId trace
+        populate: {
+          path: "chapterId",
+          select: "moduleId",
+          populate: {
+            path: "moduleId",
+            select: "courseId",
+            populate: {
+              path: "courseId",
+              select: "_id"
+            }
+          }
+        }
+      })
+      .sort({ createdAt: -1 });
+
+    // 3. Extract courseId from first submission
+    const firstSubmission = submissions[0];
+    const courseId =
+      firstSubmission?.lessonId?.chapterId?.moduleId?.courseId?._id || null;
+
+    // 4. Strip submissions to only keep lessonId
+    const strippedSubmissions = submissions.map(sub => ({
+      _id: sub._id,
+      assignmentId: sub.assignmentId,
+      lessonId: sub.lessonId?._id,
+      createdAt: sub.createdAt,
+      updatedAt: sub.updatedAt
+    }));
+
+    // 5. Return response
+    res.status(200).json({
+      status: "success",
+      assignment,
+      courseId,
+      submissions: strippedSubmissions
+    });
+
+  } catch (err) {
+    next(err);
+  }
 };
 
 const getAssignmentsByCreatedBy = async (req, res, next) => {
@@ -285,7 +317,7 @@ const updateAssignment = async (req, res, next) => {
       }
   
       // 3. Process new files if provided
-      const processedFiles = await processAssignmentFiles(files);
+      const processedFiles = await processAssignmentFiles(files,assignment?.files);
   
       // 4. Update assignment
       assignment.title = title || assignment.title;
