@@ -217,9 +217,10 @@ const formatDuration = (minutes) => {
   const hrs = Math.floor(minutes / 60);
   const mins = minutes % 60;
 
-  if (hrs > 0 && mins > 0) return `${hrs} hr ${mins} min`;
-  if (hrs > 0) return `${hrs} hr`;
-  return `${mins} min`;
+  if (hrs > 0 && mins > 0) return `${hrs} Hours ${mins} Minutes`;
+  if (hrs > 0 && hrs == 1) return `${hrs} Hour`;
+  if (hrs > 0) return `${hrs} Hours`
+  return `${mins} Minutes`;
 };
 
 exports.getModulesByCourseId = catchAsync(async (req, res) => {

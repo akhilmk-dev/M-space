@@ -112,7 +112,7 @@ const getSubmissionsByStudent = async (req, res, next) => {
         }
 
         const submissions = await AssignmentSubmission.find(filter)
-            .populate("assignmentId", "title deadline")
+            .populate("assignmentId", "title deadline description")
             .populate("studentId", "name email")
             .sort({ createdAt: -1 });
 

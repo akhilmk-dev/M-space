@@ -1,19 +1,21 @@
 const express = require('express');
 const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId } = require('../controllers/studentController');
 const { authenticate } = require('../middleware/authMiddleware');
+const { addStudentSchema, updateStudentSchema } = require('../validations/studentValidation');
+const validateMiddleware = require('../utils/validate');
 const router = express.Router();
 
 // Create a new student
-router.post('/', createStudent );
+router.post('/',authenticate,validateMiddleware(addStudentSchema), createStudent );
 
 // Update student
-router.put('/:studentId', updateStudent);
+router.put('/:studentId',authenticate,validateMiddleware(updateStudentSchema), updateStudent);
 
 // Get list of students with pagination and optional search
-router.get('/', listStudents );
+router.get('/',authenticate, listStudents );
 
 // Delete student
-router.delete('/:studentId', deleteStudent);
+router.delete('/:studentId',authenticate, deleteStudent);
 
 router.get('/by-course/:courseId',authenticate, getStudentsByCourseId);
 

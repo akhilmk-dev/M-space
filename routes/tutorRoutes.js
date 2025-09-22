@@ -1,0 +1,23 @@
+const express = require("express");
+const router = express.Router();
+const tutorController = require("../controllers/tutorController");
+const { authenticate } = require("../middleware/authMiddleware");
+const validateMiddleware = require("../utils/validate");
+const { addTutorSchema, updateTutorSchema } = require("../validations/tutorValidation");
+
+// Create tutor
+router.post("/",authenticate,validateMiddleware(addTutorSchema), tutorController.createTutor);
+
+// List tutors with pagination & search
+router.get("/",authenticate, tutorController.listTutors);
+
+// Update tutor
+router.put("/:tutorId",authenticate,validateMiddleware(updateTutorSchema), tutorController.updateTutor);
+
+// Delete tutor
+router.delete("/:tutorId",authenticate, tutorController.deleteTutor);
+
+// Get tutors by courseId
+router.get("/course/:courseId",authenticate, tutorController.getTutorsByCourseId);
+
+module.exports = router;

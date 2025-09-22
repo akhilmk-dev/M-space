@@ -24,7 +24,6 @@ const { deleteFileFromS3 } = require("../utils/deleteFileFromS3");
 
 //         uploaded.push({ name, fileUrl, size });
 //     }
-
 //     return uploaded;
 // };
 

@@ -1,10 +1,29 @@
 const mongoose = require('mongoose');
 
-const tutorSchema = new mongoose.Schema({
-  name: { type: String, required: [true,"Name is required"] },
-  email: { type: String, unique: true, required: [true,"Email is required"] },
-  password: { type: String, required: [true,"Password is required"] },
-  refresh_token: { type: String }
-}, { timestamps: true });
+const tutorSchema = new mongoose.Schema(
+  {
+    userId: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'User', 
+      required: true 
+    },
+    courseIds: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Course",
+          required: true
+        }
+      ],
+      validate: {
+        validator: function (v) {
+          return Array.isArray(v) && v.length > 0;
+        },
+        message: "At least one courseId is required"
+      }
+    }
+  }, 
+  { timestamps: true }
+);
 
 module.exports = mongoose.model('Tutor', tutorSchema);
