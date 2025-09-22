@@ -61,9 +61,9 @@ const submitAssignment = async (req, res, next) => {
     } catch (err) {
       next(err);
     }
-  };
+};
 
-  const reviewAssignment = async (req, res, next) => {
+const reviewAssignment = async (req, res, next) => {
     try {
       const { assignmentId } = req.params;
       const { mark, comment } = req.body;
@@ -97,7 +97,7 @@ const submitAssignment = async (req, res, next) => {
     } catch (err) {
       next(err);
     }
-  };
+};
 
 const getSubmissionsByStudent = async (req, res, next) => {
     try {
@@ -135,7 +135,7 @@ const getSubmissionById = async (req, res, next) => {
         const { submissionId } = req.params;
 
         const submission = await AssignmentSubmission.findById(submissionId)
-            .populate("assignmentId", "title deadline")
+            .populate("assignmentId","title description lessonId deadline files")
             .populate("studentId", "name email");
 
         if (!submission) {
@@ -152,7 +152,6 @@ const getSubmissionById = async (req, res, next) => {
         next(err);
     }
 };
-
 
 const getAllSubmissions = async (req, res, next) => {
     try {

@@ -80,7 +80,7 @@ async function createTutor(req, res, next) {
 
         res.status(201).json({
             message: "Tutor created successfully.",
-            tutor: {
+            data: {
                 id: user._id,
                 name: user.name,
                 email: user.email,
