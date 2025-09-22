@@ -12,6 +12,7 @@ const {
 // Create Chapter
 exports.createChapter = catchAsync(async (req, res) => {
   const { moduleId, title, orderIndex } = req.body;
+
   // Check if module exists
   const moduleExists = await Module.findById(moduleId);
   if (!moduleExists) {
@@ -24,24 +25,80 @@ exports.createChapter = catchAsync(async (req, res) => {
     throw new ConflictError("A chapter with this title already exists in this module.");
   }
 
-  const chapter = await Chapter.create({ moduleId, title, orderIndex });
-  res.status(201).json({ status: 'success', data: chapter });
-});
+  // Check for existing chapter with same orderIndex in the module
+  const existingOrder = await Chapter.findOne({ moduleId, orderIndex });
+  if (existingOrder) {
+    throw new ConflictError(`A chapter with order ${orderIndex} already exists in this module.`);
+  }
 
+  // Create chapter
+  const chapter = await Chapter.create({ moduleId, title, orderIndex });
+  res.status(201).json({ status: "success", data: {
+    _id:chapter?._id,
+    moduleId:moduleExists ? moduleExists: chapter?.moduleId,
+    title:chapter?.title,
+    orderIndex:chapter?.orderIndex,
+    createdAt:chapter?.createdAt
+  } });
+});
 
 // Get All Chapters
 exports.getAllChapters = catchAsync(async (req, res) => {
-  const chapters = await Chapter.find().populate('moduleId', 'title');
-  res.status(200).json({ status: 'success', data: chapters });
+  //  Pagination
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  //  Search
+  const search = req.query.search || '';
+  const searchRegex = new RegExp(search, 'i');
+
+  // Sort parsing from `sortBy=field:direction`
+  let sortField = 'createdAt';
+  let sortOrder = -1; // default: descending
+
+  if (req.query.sortBy) {
+    const [field, order] = req.query.sortBy.split(':');
+    sortField = field || 'createdAt';
+    sortOrder = order === 'asc' ? 1 : -1;
+  }
+
+  //  Module filter (if moduleId provided in query)
+  const moduleId = req.query.moduleId;
+
+  // Query conditions
+  const query = {
+    ...(moduleId ? { moduleId } : {}), 
+    title: { $regex: searchRegex }      
+  };
+
+  // Count
+  const totalChapters = await Chapter.countDocuments(query);
+
+  // Fetch
+  const chapters = await Chapter.find(query)
+    .populate('moduleId', 'title')   
+    .sort({ [sortField]: sortOrder })
+    .skip(skip)
+    .limit(limit);
+
+  // Response
+  res.status(200).json({
+    status: 'success',
+    page,
+    limit,
+    total: totalChapters,
+    totalPages: Math.ceil(totalChapters / limit),
+    data: chapters,
+  });
 });
+
 
 // Get Chapter by ID
 exports.getChapterById = catchAsync(async (req, res) => {
   const { chapterId } = req.params;
   const chapter = await Chapter.findById(chapterId).populate('moduleId', 'title');
-
   if (!chapter) throw new NotFoundError('Chapter not found');
-
   res.status(200).json({ status: 'success', data: chapter });
 });
 
@@ -54,12 +111,15 @@ exports.updateChapter = catchAsync(async (req, res) => {
     throw new EmptyRequestBodyError();
   }
 
-  const chapter = await Chapter.findById(chapterId);
+  const chapter = await Chapter.findById(chapterId).populate('moduleId');
+  
   if (!chapter) throw new NotFoundError('Chapter not found');
 
   // If moduleId is being updated, check if the new module exists
+  let module= null
   if (updates.moduleId) {
     const moduleExists = await Module.findById(updates.moduleId);
+     module = moduleExists;
     if (!moduleExists) throw new NotFoundError('Module not found');
   }
 
@@ -81,7 +141,13 @@ exports.updateChapter = catchAsync(async (req, res) => {
   Object.assign(chapter, updates);
   await chapter.save();
 
-  res.status(200).json({ status: 'success', message: "Chapter updated successfully", data: chapter });
+  res.status(200).json({ status: 'success', message: "Chapter updated successfully", data: {
+    _id:chapter?._id,
+    moduleId:module ? module: chapter?.moduleId,
+    title:chapter?.title,
+    orderIndex:chapter?.orderIndex,
+    createdAt:chapter?.createdAt
+  } });
 });
 
 // Delete Chapter
@@ -91,7 +157,7 @@ exports.deleteChapter = catchAsync(async (req, res) => {
 
   if (!chapter) throw new NotFoundError('Chapter not found');
 
-  res.status(200).json({ status: 'success', message: 'Chapter deleted successfully' });
+  res.status(200).json({ status: 'success', message: 'Chapter deleted successfully',data:chapter });
 });
 
 // Get Chapters by Module ID

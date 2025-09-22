@@ -4,6 +4,7 @@ const Course = require('../models/Course');
 const Student = require('../models/Student');
 const { BadRequestError, NotFoundError, ConflictError } = require('../utils/customErrors'); // adjust your error classes
 const Roles = require('../models/Roles');
+const bcrypt = require("bcrypt");
 
 // Create only student (you already have)
 async function createStudent(req, res, next) {
@@ -123,7 +124,7 @@ async function listStudents(req, res, next) {
         select: 'role_name'
       })
       .populate({
-        path: '_id', // this is trick: you'd need to populate Student relation
+        path: '_id', 
         // Better: use Student model to join
       })
       .lean();
@@ -147,13 +148,12 @@ async function listStudents(req, res, next) {
     }));
 
     res.json({
-      data: students,
-      meta: {
+        status: "success",
+        data: students,
         total,
         page: parseInt(page),
         limit: parseInt(limit),
         totalPages: Math.ceil(total / limit),
-      },
     });
   } catch (err) {
     next(err);
@@ -184,7 +184,7 @@ async function updateStudent(req, res, next) {
     if (!role || !/student/i.test(role.role_name)) {
       throw new BadRequestError("User is not a student");
     }
-
+    
     // Update course if provided
     let course = null;
     if (courseId) {
@@ -230,7 +230,7 @@ async function updateStudent(req, res, next) {
 
     res.json({
       message: "Student updated successfully",
-      student: {
+      data: {
         id: user._id,
         name: user.name,
         email: user.email,
@@ -272,12 +272,12 @@ async function deleteStudent(req, res, next) {
     await Student.deleteOne({ userId: studentId }).session(session);
 
     // Optionally delete user or set inactive
-    await User.deleteOne({ _id: studentId }).session(session);
+    const deletedStudent = await User.deleteOne({ _id: studentId }).session(session);
 
     await session.commitTransaction();
     session.endSession();
 
-    res.json({ message: "Student deleted successfully" });
+    res.json({status:"success", message: "Student deleted successfully",data:user });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

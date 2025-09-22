@@ -21,7 +21,7 @@ const createUser = async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const { name, email, phone, password, roleId, courseId } = req.body;
+    const { name, email, phone, password, roleId } = req.body;
 
     // 1. Check if user already exists
     const existingUser = await User.findOne({ email }).session(session);
@@ -57,33 +57,7 @@ const createUser = async (req, res, next) => {
 
     const user = newUser[0];
 
-    // 5. If role is 'student', proceed to create Student record
-    const roleName = roleDoc.role_name.toLowerCase();
-    if (roleName === "student") {
-      if (!courseId) {
-        throw new BadRequestError("Course ID is required for students.");
-      }
-
-      if (!mongoose.Types.ObjectId.isValid(courseId)) {
-        throw new BadRequestError("Invalid Course ID format.");
-      }
-
-      const courseExists = await Course.findById(courseId).session(session);
-      if (!courseExists) {
-        throw new NotFoundError("Course not found.");
-      }
-
-      await Student.create(
-        [{
-          userId: user._id,
-          courseId,
-          enrollmentDate: new Date(),
-        }],
-        { session }
-      );
-    }
-
-    // commit transaction
+    // ✅ Commit transaction
     await session.commitTransaction();
     session.endSession();
 
@@ -94,7 +68,6 @@ const createUser = async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: roleDoc.role_name,
-        course: roleName === "student" ? courseExists : undefined,
       },
     });
   } catch (err) {
@@ -103,9 +76,9 @@ const createUser = async (req, res, next) => {
     next(err);
   }
 };
+
 const getUsers = async (req, res, next) => {
   try {
-    // ======== Query Params ========
     const {
       page = 1,
       limit = 10,
@@ -120,21 +93,28 @@ const getUsers = async (req, res, next) => {
 
     // ======== Search Filter ========
     const searchFilter = search
-      ? {
-          name: { $regex: search, $options: "i" }, 
-        }
+      ? { name: { $regex: search, $options: "i" } }
       : {};
 
     // ======== Sort Options ========
-    const sortOptions = {
-      [sortBy]: sortOrder.toLowerCase() === "asc" ? 1 : -1,
+    const sortOptions = { [sortBy]: sortOrder.toLowerCase() === "asc" ? 1 : -1 };
+
+    // ======== Exclude Tutor and Student ========
+    const excludedRoles = ["Tutor", "Student"];
+    const excludedRoleIds = await Role.find({ role_name: { $in: excludedRoles } }).select("_id");
+
+    const roleIdsToExclude = excludedRoleIds.map(r => r._id);
+
+    const query = {
+      ...searchFilter,
+      roleId: { $nin: roleIdsToExclude },
     };
 
     // ======== Total Count ========
-    const total = await User.countDocuments(searchFilter);
+    const total = await User.countDocuments(query);
 
     // ======== Fetch Users ========
-    const users = await User.find(searchFilter)
+    const users = await User.find(query)
       .populate("roleId", "role_name")
       .select("name email phone status roleId createdAt updatedAt")
       .sort(sortOptions)
@@ -142,7 +122,6 @@ const getUsers = async (req, res, next) => {
       .limit(pageSize)
       .lean();
 
-    // ======== Format Result ========
     const result = users.map(user => ({
       id: user._id,
       name: user.name,
@@ -151,7 +130,7 @@ const getUsers = async (req, res, next) => {
       isActive: user.status,
       role: {
         role_name: user.roleId?.role_name || null,
-        _id: user.roleId._id
+        _id: user.roleId?._id,
       },
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
@@ -210,6 +189,7 @@ try {
 /**
 * Update user details (name, email, phone, status, roleId)
 */
+
 const updateUser = async (req, res, next) => {
 try {
   const { userId } = req.params;

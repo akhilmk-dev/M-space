@@ -76,7 +76,6 @@ exports.getAllCourses = catchAsync(async (req, res) => {
   });
 });
 
-
 // Get Course by ID
 exports.getCourseById = catchAsync(async (req, res) => {
   const { courseId } = req.params;
@@ -108,13 +107,52 @@ exports.updateCourse = catchAsync(async (req, res) => {
 exports.deleteCourse = catchAsync(async (req, res) => {
   const user = await User.findById(req.user.id).populate('roleId');
   const role = user?.roleId?.role_name?.toLowerCase();
-  if( role == "student" )throw new ForbiddenError("user doesn't have permission to delete course")
+
+  if (role === "student") {
+    throw new ForbiddenError("User doesn't have permission to delete course");
+  }
+
   const { courseId } = req.params;
+
   const course = await Course.findById(courseId);
   if (!course) throw new NotFoundError("Course not found");
-  await checkDependencies("Course",courseId, ["courseId"]);
+
+  // ===== Start Cascade Deletion =====
+  const modules = await Module.find({ courseId });
+  const moduleIds = modules.map(m => m._id);
+
+  const chapters = await Chapter.find({ moduleId: { $in: moduleIds } });
+  const chapterIds = chapters.map(c => c._id);
+
+  const lessons = await Lesson.find({ chapterId: { $in: chapterIds } });
+  const lessonIds = lessons.map(l => l._id);
+
+  // 1. Delete Assignments
+  await Assignment.deleteMany({ lessonId: { $in: lessonIds } });
+
+  // Add similar deletion for Quizzes, Media, Notes, etc.
+  // await Quiz.deleteMany({ lessonId: { $in: lessonIds } });
+  // await Media.deleteMany({ lessonId: { $in: lessonIds } });
+
+  // 2. Delete Lessons
+  await Lesson.deleteMany({ chapterId: { $in: chapterIds } });
+
+  // 3. Delete Chapters
+  await Chapter.deleteMany({ moduleId: { $in: moduleIds } });
+
+  // 4. Delete Modules
+  await Module.deleteMany({ courseId });
+
+  // 5. Delete Course
   const deletedCourse = await Course.findByIdAndDelete(courseId);
-  res.status(200).json({ status: 'success', message: 'Course deleted successfully' });
+
+  // ===== End Cascade Deletion =====
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Course and all related data deleted successfully',
+    data: deletedCourse
+  });
 });
 
 exports.geFullCourseById = async (req, res, next) => {
@@ -159,3 +197,4 @@ exports.geFullCourseById = async (req, res, next) => {
     next(err);
   }
 };
+

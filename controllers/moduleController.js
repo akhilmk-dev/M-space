@@ -33,48 +33,50 @@ exports.createModule = catchAsync(async (req, res) => {
 
 // Get All Modules
 exports.getAllModules = catchAsync(async (req, res) => {
-  // 1. Pagination
+  //  Pagination
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  // 2. Search
+  //  Search
   const search = req.query.search || '';
   const searchRegex = new RegExp(search, 'i');
 
-  // 3. Sort
-  let sort = { createdAt: -1 }; // Default sort
+  // 3. Sort parsing from `sortBy=field:direction`
+  let sortField = 'createdAt';
+  let sortOrder = -1; // default: descending
+
   if (req.query.sortBy) {
     const [field, order] = req.query.sortBy.split(':');
-    sort = { [field]: order === 'asc' ? 1 : -1 };
+    sortField = field || 'createdAt';
+    sortOrder = order === 'asc' ? 1 : -1;
   }
 
   // 4. Build query
   const query = {
-    title: { $regex: searchRegex }
+    title: { $regex: searchRegex },
   };
 
   // 5. Total count
-  const total = await Module.countDocuments(query);
+  const totalModules = await Module.countDocuments(query);
 
   // 6. Fetch data
   const modules = await Module.find(query)
-    .populate('courseId', 'title')
-    .sort(sort)
+    .populate('courseId', 'title') // populate course title
+    .sort({ [sortField]: sortOrder })
     .skip(skip)
     .limit(limit);
 
-  // 7. Response
+  // 7. Respond
   res.status(200).json({
     status: 'success',
     page,
     limit,
-    total,
-    totalPages: Math.ceil(total / limit),
+    total: totalModules,
+    totalPages: Math.ceil(totalModules / limit),
     data: modules,
   });
 });
-
 
 // Get Module by ID
 // exports.getModuleById = catchAsync(async (req, res) => {
@@ -89,16 +91,16 @@ exports.getAllModules = catchAsync(async (req, res) => {
 exports.getModuleById = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
   const user = await User.findById(req.user.id).populate('roleId')
-  // 1. Find the module and its course
+  // Find the module and its course
   const module = await Module.findById(moduleId).populate('courseId', 'title');
   if (!module) throw new NotFoundError('Module not found');
 
-  // 2. Find all chapters linked to this module
+  // Find all chapters linked to this module
   const chapters = await Chapter.find({ moduleId }).lean();
 
   let studentCompletedLessons = [];
 
-  // 3. If user is a student, fetch completed lessons
+  // If user is a student, fetch completed lessons
   if (user?.roleId?.role_name == 'Student') {
     studentCompletedLessons = await LessonCompletion.find({ studentId: user._id })
       .select('lessonId')
@@ -108,7 +110,7 @@ exports.getModuleById = catchAsync(async (req, res) => {
     studentCompletedLessons = new Set(studentCompletedLessons.map(lc => lc.lessonId.toString()));
   }
 
-  // 4. For each chapter, fetch lessons and add completion status
+  //  For each chapter, fetch lessons and add completion status
   const chaptersWithLessons = await Promise.all(
     chapters.map(async (chapter) => {
       const lessons = await Lesson.find({ chapterId: chapter._id }).lean();
@@ -128,13 +130,13 @@ exports.getModuleById = catchAsync(async (req, res) => {
     })
   );
 
-  // 5. Prepare final module data
+  // Prepare final module data
   const moduleData = {
     ...module.toObject(),
     chapters: chaptersWithLessons
   };
 
-  // 6. Send response
+  // Send response
   res.status(200).json({
     status: 'success',
     data: moduleData
@@ -174,7 +176,15 @@ exports.updateModule = catchAsync(async (req, res) => {
   Object.assign(module, updates);
   await module.save();
 
-  res.status(200).json({ status: 'success',message:"Module updated successully", data: {...module,courseId:course} });
+  res.status(200).json({ status: 'success',message:"Module updated successully", data: {
+    _id:module?._id,
+    title:module?.title,
+    courseId:{
+      _id:course?._id,
+      title:course?.title
+    },
+    orderIndex:module?.orderIndex
+  } });
 });
 
 // Get Modules by Course ID
@@ -293,8 +303,8 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
 
     return {
       ...mod,
-      totalTime: formatDuration(totalMinutes), // formatted total time
-      percentCompleted: `${percentCompleted}%`, // formatted percentage
+      totalTime: formatDuration(totalMinutes), 
+      percentCompleted: `${percentCompleted}%`,
     };
   });
 
@@ -304,7 +314,6 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
   });
 });
 
-
 // Delete Module
 exports.deleteModule = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
@@ -312,5 +321,5 @@ exports.deleteModule = catchAsync(async (req, res) => {
   if (!module) throw new NotFoundError('Module not found');
   await checkDependencies("Course",moduleId, ["courseId"]);
   const deletedModule = await Module.findByIdAndDelete(moduleId);
-  res.status(200).json({ status: 'success', message: 'Module deleted successfully' });
+  res.status(200).json({ status: 'success', message: 'Module deleted successfully',data:deletedModule });
 });
