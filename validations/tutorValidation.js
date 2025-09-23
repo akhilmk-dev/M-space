@@ -47,7 +47,8 @@ export const updateTutorSchema = Joi.object({
   password: Joi.string().min(6).allow("").messages({
     "string.min": "Password must be at least 6 characters",
   }),
-  courses: Joi.array().items(Joi.string().required()).min(1).required().messages({
+  courseIds: Joi.array().items(Joi.string().required()).min(1).required().messages({
     "array.min": "At least one course must be selected",
   }),
+  roleId:Joi.string()
 });
