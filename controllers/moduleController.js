@@ -90,7 +90,8 @@ exports.getAllModules = catchAsync(async (req, res) => {
 
 exports.getModuleById = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
-  const user = await User.findById(req.user.id).populate('roleId')
+  const user = await User.findById(req.user.id).populate('roleId');
+
   // Find the module and its course
   const module = await Module.findById(moduleId).populate('courseId', 'title');
   if (!module) throw new NotFoundError('Module not found');
@@ -98,30 +99,36 @@ exports.getModuleById = catchAsync(async (req, res) => {
   // Find all chapters linked to this module
   const chapters = await Chapter.find({ moduleId }).lean();
 
-  let studentCompletedLessons = [];
+  let studentLessonCompletions = [];
 
-  // If user is a student, fetch completed lessons
-  if (user?.roleId?.role_name == 'Student') {
-    studentCompletedLessons = await LessonCompletion.find({ studentId: user._id })
-      .select('lessonId')
+  // If user is a student, fetch completed lessons and currentTime
+  if (user?.roleId?.role_name === 'Student') {
+    studentLessonCompletions = await LessonCompletion.find({ studentId: user._id })
+      .select('lessonId currentTime isCompleted') // include isCompleted
       .lean();
-
-    // Convert to Set for faster lookup
-    studentCompletedLessons = new Set(studentCompletedLessons.map(lc => lc.lessonId.toString()));
+    
+    // Convert to Map for faster lookup: lessonId => { currentTime, isCompleted }
+    studentLessonCompletions = new Map(
+      studentLessonCompletions.map(lc => [
+        lc.lessonId.toString(),
+        { currentTime: lc.currentTime || 0, isCompleted: lc.isCompleted || false }
+      ])
+    );
   }
 
-  //  For each chapter, fetch lessons and add completion status
+  // For each chapter, fetch lessons and add completion status + currentTime
   const chaptersWithLessons = await Promise.all(
     chapters.map(async (chapter) => {
       const lessons = await Lesson.find({ chapterId: chapter._id }).lean();
 
-      const lessonsWithCompletion = lessons.map((lesson) => ({
-        ...lesson,
-        isCompleted:
-          user?.roleId?.role_name === 'Student'
-            ? studentCompletedLessons.has(lesson._id.toString())
-            : undefined
-      }));
+      const lessonsWithCompletion = lessons.map((lesson) => {
+        const completion = studentLessonCompletions.get(lesson._id.toString()) || { currentTime: 0, isCompleted: false };
+        return {
+          ...lesson,
+          isCompleted: completion.isCompleted,
+          currentTime: completion.currentTime,
+        };
+      });
 
       return {
         ...chapter,
@@ -142,6 +149,7 @@ exports.getModuleById = catchAsync(async (req, res) => {
     data: moduleData
   });
 });
+
 
 // Update Module
 exports.updateModule = catchAsync(async (req, res) => {

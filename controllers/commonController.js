@@ -41,24 +41,45 @@ exports.getImageUrl = catchAsync(async (req, res) => {
     }
 });
 
-exports.markLessonCompletion = async (req, res, next) => {
-  try {
-    // Automatically use logged-in student ID
-    const studentId = req.user?.id;
-    const { lessonId, isCompleted = true } = req.body;
+exports.markLessonCompletion = catchAsync(async (req, res) => {
+  const studentId = req.user?.id;
+  const { lessonId, isCompleted = true } = req.body;
 
-    // Upsert (create or update) lesson completion record
-    const updatedRecord = await LessonCompletion.findOneAndUpdate(
-      { studentId, lessonId },
-      { isCompleted },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-
-    res.status(200).json({
-      message: `Lesson marked as ${isCompleted ? "completed" : "not completed"}`,
-      data: updatedRecord,
-    });
-  } catch (err) {
-    next(err);
+  if (!lessonId) {
+    throw new BadRequestError('lessonId is required');
   }
-};
+
+  const updatedRecord = await LessonCompletion.findOneAndUpdate(
+    { studentId, lessonId },
+    { isCompleted },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  res.status(200).json({
+    status: 'success',
+    message: `Lesson marked as ${isCompleted ? 'completed' : 'not completed'}`,
+    data: updatedRecord,
+  });
+});
+
+// Update Lesson Current Time
+exports.updateLessonCurrentTime = catchAsync(async (req, res) => {
+  const studentId = req.user?.id;
+  const { lessonId, currentTime } = req.body;
+
+  if (!lessonId || currentTime == null) {
+    throw new BadRequestError('lessonId and currentTime are required');
+  }
+
+  const updatedRecord = await LessonCompletion.findOneAndUpdate(
+    { studentId, lessonId },
+    { currentTime },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Lesson current time updated successfully',
+    data: updatedRecord,
+  });
+});

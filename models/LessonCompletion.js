@@ -16,6 +16,9 @@ const lessonCompletionSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    currentTime:{
+      type: String
+    }
   },
   { timestamps: true }
 );
