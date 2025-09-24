@@ -91,18 +91,32 @@ async function createStudent(req, res, next) {
 // List students with pagination & search
 async function listStudents(req, res, next) {
   try {
-    // Parse query params
-    const { page = 1, limit = 10, search = '' } = req.query;
+    // 1. Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // Find student role id
-    const studentRole = await Roles.findOne({ role_name: /student/i });
-    if (!studentRole) {
-      throw new NotFoundError("Student role not found.");
+    // 2. Search
+    const search = req.query.search || '';
+    const searchRegex = new RegExp(search, 'i');
+
+    // 3. Sort (field:direction)
+    let sortField = 'createdAt';
+    let sortOrder = -1; // default: descending
+
+    if (req.query.sortBy) {
+      const [field, order] = req.query.sortBy.split(':');
+      sortField = field || 'createdAt';
+      sortOrder = order === 'asc' ? 1 : -1;
     }
 
-    // Build search/filter condition
-    const searchRegex = new RegExp(search, 'i');
+    // 4. Student role
+    const studentRole = await Roles.findOne({ role_name: /student/i });
+    if (!studentRole) {
+      throw new NotFoundError('Student role not found.');
+    }
+
+    // 5. Match condition
     const match = {
       roleId: studentRole._id,
       $or: [
@@ -112,24 +126,19 @@ async function listStudents(req, res, next) {
       ]
     };
 
-    // Query total count
+    // 6. Count
     const total = await User.countDocuments(match);
 
-    // Query with skip + limit + optionally populate course
+    // 7. Fetch users with sort + pagination
     const users = await User.find(match)
-      .skip(parseInt(skip))
-      .limit(parseInt(limit))
-      .populate({
-        path: 'roleId',
-        select: 'role_name'
-      })
-      .populate({
-        path: '_id', 
-        // Better: use Student model to join
-      })
+      .populate('roleId', 'role_name')
+      .sort({ [sortField]: sortOrder })
+      .collation({ locale: "en", strength: 2 }) // <-- case-insensitive sort
+      .skip(skip)
+      .limit(limit)
       .lean();
 
-    // To get course info, join via Student
+    // 8. Join student info + course
     const students = await Promise.all(users.map(async (u) => {
       const studentInfo = await Student.findOne({ userId: u._id }).lean();
       let course = null;
@@ -147,18 +156,20 @@ async function listStudents(req, res, next) {
       };
     }));
 
+    // 9. Response
     res.json({
-        status: "success",
-        data: students,
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / limit),
+      status: "success",
+      data: students,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
     });
   } catch (err) {
     next(err);
   }
 }
+
 
 // Update student
 async function updateStudent(req, res, next) {
@@ -184,7 +195,7 @@ async function updateStudent(req, res, next) {
     if (!role || !/student/i.test(role.role_name)) {
       throw new BadRequestError("User is not a student");
     }
-    
+
     // Update course if provided
     let course = null;
     if (courseId) {
@@ -277,7 +288,7 @@ async function deleteStudent(req, res, next) {
     await session.commitTransaction();
     session.endSession();
 
-    res.json({status:"success", message: "Student deleted successfully",data:user });
+    res.json({ status: "success", message: "Student deleted successfully", data: user });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

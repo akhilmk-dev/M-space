@@ -57,17 +57,22 @@ const createUser = async (req, res, next) => {
 
     const user = newUser[0];
 
-    // ✅ Commit transaction
+    // Commit transaction
     await session.commitTransaction();
     session.endSession();
 
     res.status(201).json({
       message: `${roleDoc.role_name} registered successfully.`,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: roleDoc.role_name,
+      data: {
+        id: user?._id,
+        name: user?.name,
+        email: user?.email,
+        phone: user?.phone,
+        createdAt:user?.createdAt,
+        role: {
+         role_name: roleDoc?.role_name,
+         _id:roleDoc?._id
+        },
       },
     });
   } catch (err) {
@@ -79,51 +84,54 @@ const createUser = async (req, res, next) => {
 
 const getUsers = async (req, res, next) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      search = "",
-      sortBy = "createdAt",
-      sortOrder = "desc",
-    } = req.query;
+    // 1. Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
 
-    const pageNumber = parseInt(page);
-    const pageSize = parseInt(limit);
-    const skip = (pageNumber - 1) * pageSize;
+    // 2. Search
+    const search = req.query.search || "";
+    const searchRegex = new RegExp(search, "i");
 
-    // ======== Search Filter ========
-    const searchFilter = search
-      ? { name: { $regex: search, $options: "i" } }
-      : {};
+    // 3. Sort (field:direction)
+    let sortField = "createdAt";
+    let sortOrder = -1; // default: descending
 
-    // ======== Sort Options ========
-    const sortOptions = { [sortBy]: sortOrder.toLowerCase() === "asc" ? 1 : -1 };
+    if (req.query.sortBy) {
+      const [field, order] = req.query.sortBy.split(":");
+      sortField = field || "createdAt";
+      sortOrder = order === "asc" ? 1 : -1;
+    }
 
-    // ======== Exclude Tutor and Student ========
+    // 4. Exclude Tutor and Student roles
     const excludedRoles = ["Tutor", "Student"];
-    const excludedRoleIds = await Role.find({ role_name: { $in: excludedRoles } }).select("_id");
+    const excludedRoleIds = await Role.find({
+      role_name: { $in: excludedRoles },
+    }).select("_id");
+    const roleIdsToExclude = excludedRoleIds.map((r) => r._id);
 
-    const roleIdsToExclude = excludedRoleIds.map(r => r._id);
-
+    // 5. Match query
     const query = {
-      ...searchFilter,
+      name: { $regex: searchRegex },
       roleId: { $nin: roleIdsToExclude },
     };
 
-    // ======== Total Count ========
+    // 6. Count
     const total = await User.countDocuments(query);
 
-    // ======== Fetch Users ========
+    // 7. Fetch users with sort + collation
     const users = await User.find(query)
       .populate("roleId", "role_name")
       .select("name email phone status roleId createdAt updatedAt")
-      .sort(sortOptions)
+      .sort({ [sortField]: sortOrder })
+      .collation({ locale: "en", strength: 2 }) // case-insensitive sorting
       .skip(skip)
-      .limit(pageSize)
+      .limit(limit)
       .lean();
 
-    const result = users.map(user => ({
-      id: user._id,
+    // 8. Format result
+    const result = users.map((user) => ({
+      _id: user._id,
       name: user.name,
       email: user.email,
       phone: user.phone,
@@ -136,12 +144,13 @@ const getUsers = async (req, res, next) => {
       updatedAt: user.updatedAt,
     }));
 
+    // 9. Response
     res.status(200).json({
       message: "Users fetched successfully",
       total,
-      page: pageNumber,
-      limit: pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
       data: result,
     });
   } catch (err) {
@@ -189,7 +198,6 @@ try {
 /**
 * Update user details (name, email, phone, status, roleId)
 */
-
 const updateUser = async (req, res, next) => {
 try {
   const { userId } = req.params;
@@ -215,8 +223,9 @@ try {
     throw new BadRequestError("Invalid roleId format.");
   }
 
+  let roleDoc = null;
   if (roleId) {
-    const roleDoc = await Role.findById(roleId);
+    roleDoc = await Role.findById(roleId);
     if (!roleDoc) throw new NotFoundError("Role not found.");
   }
 
@@ -230,12 +239,15 @@ try {
   res.status(200).json({
     message: "User updated successfully",
     data: {
-      id: user._id,
+      _id: user._id,
       name: user.name,
       email: user.email,
       phone: user.phone,
       isActive: user.status,
-      roleId: user.roleId,
+      role: {
+        role_name:roleDoc?.role_name,
+        _id:roleDoc?._id
+      },
     },
   });
 } catch (err) {

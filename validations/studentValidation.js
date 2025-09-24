@@ -24,6 +24,7 @@ export const addStudentSchema = Joi.object({
   courseId: Joi.string().required().messages({
     "string.empty": "Course is required",
   }),
+  roleId:Joi.string()
 });
 
 // Update Student (password optional)
@@ -49,4 +50,5 @@ export const updateStudentSchema = Joi.object({
   courseId: Joi.string().required().messages({
     "string.empty": "Course is required",
   }),
+  roleId:Joi.string()
 });

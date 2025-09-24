@@ -74,7 +74,14 @@ async function createTutor(req, res, next) {
             ],
             { session }
         );
-
+        let courses = [];
+        if (courseIds?.length) {
+            const courseDocs = await Course.find({ _id: { $in: courseIds } }).lean();
+            courses = courseDocs.map((c) => ({
+                id: c._id,
+                title: c.title,
+            }));
+        }
         await session.commitTransaction();
         session.endSession();
 
@@ -84,7 +91,8 @@ async function createTutor(req, res, next) {
                 id: user._id,
                 name: user.name,
                 email: user.email,
-                courses: courseIds,
+                phone:user.phone,
+                courses,
             },
         });
     } catch (err) {
@@ -97,63 +105,86 @@ async function createTutor(req, res, next) {
 // List tutors with pagination & search
 async function listTutors(req, res, next) {
     try {
-        const { page = 1, limit = 10, search = "" } = req.query;
-        const skip = (page - 1) * limit;
-
-        const tutorRole = await Roles.findOne({ role_name: /tutor/i });
-        if (!tutorRole) {
-            throw new NotFoundError("Tutor role not found.");
-        }
-
-        const searchRegex = new RegExp(search, "i");
-        const match = {
-            roleId: tutorRole._id,
-            $or: [
-                { name: { $regex: searchRegex } },
-                { email: { $regex: searchRegex } },
-                { phone: { $regex: searchRegex } },
-            ],
-        };
-
-        const total = await User.countDocuments(match);
-
-        const users = await User.find(match)
-            .skip(parseInt(skip))
-            .limit(parseInt(limit))
-            .populate("roleId", "role_name")
-            .lean();
-
-        const tutors = await Promise.all(
-            users.map(async (u) => {
-                const tutorInfo = await Tutor.findOne({ userId: u._id }).lean();
-                let courses = [];
-                if (tutorInfo && tutorInfo.courseIds.length) {
-                    courses = await Course.find({ _id: { $in: tutorInfo.courseIds } }).lean();
-                }
-                return {
-                    id: u._id,
-                    name: u.name,
-                    email: u.email,
-                    phone: u.phone,
-                    role: u.roleId.role_name,
-                    courses: courses.map((c) => ({ id: c._id, title: c.title })),
-                };
-            })
-        );
-
-        res.json({
-            status: "success",
-            data: tutors,
-            total,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(total / limit),
-        });
+      // 1. Pagination
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+  
+      // 2. Search
+      const search = req.query.search || '';
+      const searchRegex = new RegExp(search, 'i');
+  
+      // 3. Sort (field:direction)
+      let sortField = 'createdAt';
+      let sortOrder = -1; // default: descending
+  
+      if (req.query.sortBy) {
+        const [field, order] = req.query.sortBy.split(':');
+        sortField = field || 'createdAt';
+        sortOrder = order === 'asc' ? 1 : -1;
+      }
+  
+      // 4. Tutor role
+      const tutorRole = await Roles.findOne({ role_name: /tutor/i });
+      if (!tutorRole) {
+        throw new NotFoundError('Tutor role not found.');
+      }
+  
+      // 5. Match query
+      const match = {
+        roleId: tutorRole._id,
+        $or: [
+          { name: { $regex: searchRegex } },
+          { email: { $regex: searchRegex } },
+          { phone: { $regex: searchRegex } },
+        ],
+      };
+  
+      // 6. Count
+      const total = await User.countDocuments(match);
+  
+      // 7. Fetch
+      const users = await User.find(match)
+        .populate('roleId', 'role_name')
+        .sort({ [sortField]: sortOrder })
+        .collation({ locale: "en", strength: 2 })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+  
+      // 8. Enrich tutors
+      const tutors = await Promise.all(
+        users.map(async (u) => {
+          const tutorInfo = await Tutor.findOne({ userId: u._id }).lean();
+          let courses = [];
+          if (tutorInfo && tutorInfo.courseIds.length) {
+            courses = await Course.find({ _id: { $in: tutorInfo.courseIds } }).lean();
+          }
+          return {
+            id: u._id,
+            name: u.name,
+            email: u.email,
+            phone: u.phone,
+            role: u.roleId.role_name,
+            courses: courses.map((c) => ({ id: c._id, title: c.title })),
+          };
+        })
+      );
+  
+      // 9. Response
+      res.json({
+        status: 'success',
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        data: tutors,
+      });
     } catch (err) {
-        next(err);
+      next(err);
     }
-}
-
+  }
+  
 // Update tutor
 async function updateTutor(req, res, next) {
     const session = await mongoose.startSession();
@@ -209,13 +240,11 @@ async function updateTutor(req, res, next) {
             await tutorInfo.save({ session });
         }
 
-    // / Fetch updated tutor info for response formatting
-        const updatedUser = await User.findById(tutorId).populate("roleId", "role_name").lean();
         const tutorRecord = await Tutor.findOne({ userId: tutorId }).lean();
 
         let courses = [];
-        if (tutorRecord?.courseIds?.length) {
-            const courseDocs = await Course.find({ _id: { $in: tutorRecord.courseIds } }).lean();
+        if (courseIds?.length) {
+            const courseDocs = await Course.find({ _id: { $in: courseIds } }).lean();
             courses = courseDocs.map((c) => ({
                 id: c._id,
                 title: c.title,

@@ -6,15 +6,17 @@ const {
   getStudentQuestionsByLesson
 } = require('../controllers/questionAnswerController');
 const { authenticate } = require('../middleware/authMiddleware');
+const { askQuestionSchema, answerQuestionSchema } = require('../validations/questionAnswerValidation');
+const validateMiddleware = require('../utils/validate');
 
 
 const router = express.Router();
 
 // Student asks a question
-router.post('/', authenticate, askQuestion);
+router.post('/', authenticate,validateMiddleware(askQuestionSchema), askQuestion);
 
 // Tutor answers a question
-router.put('/answer/:id', authenticate, answerQuestion);
+router.put('/answer/:id', authenticate, validateMiddleware(answerQuestionSchema),answerQuestion);
 
 // Student gets their own Q&A for a lesson
 router.get('/student/lesson/:lessonId', authenticate, getStudentQuestionsByLesson);

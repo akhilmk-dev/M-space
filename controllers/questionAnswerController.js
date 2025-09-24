@@ -11,7 +11,7 @@ import {
 
 // Student asking a question
 export const askQuestion = catchAsync(async (req, res) => {
-  const { question, lessonId } = req.body;
+  const { question, lessonId,description } = req.body;
   const studentId = req.user.id; 
 
   if (!question || !lessonId) {
@@ -21,7 +21,7 @@ export const askQuestion = catchAsync(async (req, res) => {
   // Check if user is a student
   const student = await User.findById(studentId).populate("roleId");
   const role = student?.roleId?.role_name?.toLowerCase();
-  console.log(role,student)
+
   if (!student || role !== "student") {
     throw new ForbiddenError("Only students can ask questions");
   }
@@ -35,6 +35,7 @@ export const askQuestion = catchAsync(async (req, res) => {
     studentId,
     question,
     lessonId,
+    description 
   });
 
   res.status(201).json({
