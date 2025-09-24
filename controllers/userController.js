@@ -15,7 +15,6 @@ const {
 const { default: mongoose } = require("mongoose");
 const Student = require("../models/Student");
 
-
 const createUser = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -291,10 +290,64 @@ try {
 }
 };
 
+const deleteUserCascade = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { userId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new BadRequestError("Invalid userId format.");
+    }
+
+    const user = await User.findById(userId).session(session);
+    if (!user) throw new NotFoundError("User not found.");
+
+    // Get all collections in the DB
+    const collections = Object.keys(mongoose.connection.collections);
+
+    for (const collectionName of collections) {
+      const collection = mongoose.connection.collections[collectionName];
+
+      // Find fields that might reference a user
+      // Common names: userId, studentId, createdBy, uploadedBy, tutorId
+      const possibleFields = ["userId", "studentId", "createdBy", "uploadedBy", "tutorId"];
+
+      // Build dynamic $or query
+      const query = {
+        $or: possibleFields.map((field) => ({ [field]: user._id })),
+      };
+
+      // Delete matching documents
+      await collection.deleteMany(query).catch((err) => {
+        // Ignore errors for collections that don’t have these fields
+      });
+    }
+
+    // Finally, delete the user
+    const deletedUser = await User.findByIdAndDelete(userId).session(session);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      status: "success",
+      message: "User deleted successfully",
+      data: deletedUser,
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    next(err);
+  }
+};
+
 module.exports = {
   getUsers,
   createUser,
   updateUser,
   changePassword,
-  getUserById
+  getUserById,
+  deleteUserCascade
 };

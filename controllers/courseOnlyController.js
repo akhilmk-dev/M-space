@@ -1,4 +1,5 @@
 const checkDependencies = require('../helper/checkDependencies');
+const Assignment = require('../models/Assignment');
 const Chapter = require('../models/Chapter');
 const Course = require('../models/Course');
 const Lesson = require('../models/Lesson');

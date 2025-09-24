@@ -12,6 +12,7 @@ const LessonCompletion = require('../models/LessonCompletion');
 const Chapter = require('../models/Chapter');
 const User = require('../models/User');
 const checkDependencies = require('../helper/checkDependencies');
+const ModuleCompletion = require('../models/ModuleCompletion');
 
 //  Create Module
 exports.createModule = catchAsync(async (req, res) => {
@@ -233,6 +234,7 @@ const formatDuration = (minutes) => {
 
 exports.getModulesByCourseId = catchAsync(async (req, res) => {
   const { courseId } = req.params;
+  const { status } = req.query; //  read status filter from query
   const studentId = req.user.id;
 
   if (!courseId) {
@@ -250,15 +252,14 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
 
   const moduleIds = modules.map((mod) => mod._id);
 
-  // Get all chapters under the modules
+  // Chapters & lessons
   const chapters = await Chapter.find({ moduleId: { $in: moduleIds } }).lean();
-  const chapterIds = chapters.map((chapter) => chapter._id);
+  const chapterIds = chapters.map((c) => c._id);
 
-  // Get all lessons under these chapters
   const lessons = await Lesson.find({ chapterId: { $in: chapterIds } }).lean();
-  const lessonIds = lessons.map((lesson) => lesson._id);
+  const lessonIds = lessons.map((l) => l._id);
 
-  // Get completed lessons for the student
+  // Completed lessons
   const lessonCompletions = await LessonCompletion.find({
     studentId,
     lessonId: { $in: lessonIds },
@@ -269,7 +270,7 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
     lessonCompletions.map((lc) => lc.lessonId.toString())
   );
 
-  // Map chapters to their lessons for quick lookup
+  // Map lessons → chapters
   const chapterLessonMap = {};
   lessons.forEach((lesson) => {
     const chapId = lesson.chapterId.toString();
@@ -277,7 +278,7 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
     chapterLessonMap[chapId].push(lesson);
   });
 
-  // Map modules to their chapters for quick lookup
+  // Map chapters → modules
   const moduleChapterMap = {};
   chapters.forEach((chapter) => {
     const modId = chapter.moduleId.toString();
@@ -285,43 +286,67 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
     moduleChapterMap[modId].push(chapter);
   });
 
-  // Enrich each module
-  const enrichedModules = modules.map((mod) => {
-    const chaptersInModule = moduleChapterMap[mod._id.toString()] || [];
+  let enrichedModules = await Promise.all(
+    modules.map(async (mod) => {
+      const chaptersInModule = moduleChapterMap[mod._id.toString()] || [];
 
-    let totalMinutes = 0;
-    let totalLessons = 0;
-    let completedLessons = 0;
+      let totalMinutes = 0;
+      let totalLessons = 0;
+      let completedLessons = 0;
 
-    chaptersInModule.forEach((chapter) => {
-      const lessonsInChapter = chapterLessonMap[chapter._id.toString()] || [];
+      chaptersInModule.forEach((chapter) => {
+        const lessonsInChapter = chapterLessonMap[chapter._id.toString()] || [];
 
-      totalLessons += lessonsInChapter.length;
-      lessonsInChapter.forEach((lesson) => {
-        totalMinutes += lesson.duration || 0;
-        if (completedLessonIds.has(lesson._id.toString())) {
-          completedLessons += 1;
-        }
+        totalLessons += lessonsInChapter.length;
+        lessonsInChapter.forEach((lesson) => {
+          totalMinutes += lesson.duration || 0;
+          if (completedLessonIds.has(lesson._id.toString())) {
+            completedLessons += 1;
+          }
+        });
       });
-    });
 
-    const percentCompleted =
-      totalLessons > 0
-        ? Math.round((completedLessons / totalLessons) * 100)
-        : 0;
+      const percentCompleted =
+        totalLessons > 0
+          ? Math.round((completedLessons / totalLessons) * 100)
+          : 0;
 
-    return {
-      ...mod,
-      totalTime: formatDuration(totalMinutes), 
-      percentCompleted: `${percentCompleted}%`,
-    };
-  });
+      // Check if module is fully completed
+      const moduleStatus =
+        totalLessons > 0 && completedLessons === totalLessons
+          ? "completed"
+          : "inprogress";
+
+      // Upsert into ModuleCompletion collection
+      await ModuleCompletion.findOneAndUpdate(
+        { studentId, moduleId: mod._id },
+        { status: moduleStatus },
+        { upsert: true, new: true }
+      );
+
+      return {
+        ...mod,
+        totalTime: formatDuration(totalMinutes),
+        percentCompleted: `${percentCompleted}%`,
+        status: moduleStatus,
+      };
+    })
+  );
+
+  //  Apply filtering if status query is provided
+  if (status) {
+    enrichedModules = enrichedModules.filter(
+      (mod) => mod.status === status.toLowerCase()
+    );
+  }
 
   res.status(200).json({
     status: "success",
     data: enrichedModules,
   });
 });
+
+
 
 // Delete Module
 exports.deleteModule = catchAsync(async (req, res) => {
