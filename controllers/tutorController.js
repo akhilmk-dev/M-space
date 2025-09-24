@@ -183,7 +183,7 @@ async function listTutors(req, res, next) {
     } catch (err) {
       next(err);
     }
-  }
+}
   
 // Update tutor
 async function updateTutor(req, res, next) {

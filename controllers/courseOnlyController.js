@@ -3,6 +3,7 @@ const Chapter = require('../models/Chapter');
 const Course = require('../models/Course');
 const Lesson = require('../models/Lesson');
 const Module = require('../models/Module');
+const Tutor = require('../models/Tutor');
 const User = require('../models/User');
 const catchAsync = require('../utils/catchAsync');
 
@@ -198,3 +199,39 @@ exports.geFullCourseById = async (req, res, next) => {
   }
 };
 
+exports.getCoursesByAssignedTutor = catchAsync(async (req, res) => {
+  const { tutorId } = req.params;
+
+  // 1. Check if tutor exists and role is tutor
+  const tutorUser = await User.findById(tutorId).populate("roleId");
+  if (!tutorUser) throw new NotFoundError("Tutor not found");
+
+  const role = tutorUser?.roleId?.role_name?.toLowerCase();
+  if (role !== "tutor") {
+    throw new BadRequestError("Provided user is not a tutor");
+  }
+
+  // 2. Fetch tutor document to get assigned course IDs
+  const tutor = await Tutor.findOne({ userId: tutorId }).lean();
+  if (!tutor) throw new NotFoundError("Tutor profile not found");
+
+  const courseIds = tutor.courseIds || [];
+  if (courseIds.length === 0) {
+    return res.status(200).json({
+      status: "success",
+      total: 0,
+      data: [],
+    });
+  }
+
+  // 3. Fetch courses by IDs
+  const courses = await Course.find({ _id: { $in: courseIds } })
+    .populate("createdBy", "name email _id")
+    .sort({ title: 1 }); // sort by title ascending, change as needed
+
+  res.status(200).json({
+    status: "success",
+    total: courses.length,
+    data: courses,
+  });
+});

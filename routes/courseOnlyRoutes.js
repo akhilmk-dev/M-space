@@ -12,5 +12,6 @@ router.get('/:courseId',authenticate, courseController.getCourseById);
 router.put('/:courseId',authenticate,validateMiddleware(courseValidation), courseController.updateCourse);
 router.delete('/:courseId',authenticate, courseController.deleteCourse);
 router.get('/fullCourse/:courseId',authenticate,courseController.geFullCourseById);
+router.get('/tutor/:tutorId',authenticate,courseController.getCoursesByAssignedTutor);
 
 module.exports = router;

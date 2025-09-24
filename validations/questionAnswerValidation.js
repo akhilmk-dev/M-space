@@ -2,9 +2,9 @@ import Joi from "joi";
 
 // Ask Question Validation
 export const askQuestionSchema = Joi.object({
-  question: Joi.string().min(5).max(500).required().messages({
+  question: Joi.string().min(2).max(500).required().messages({
     "string.empty": "Question is required",
-    "string.min": "Question must be at least 5 characters",
+    "string.min": "Question must be at least 2 characters",
     "string.max": "Question must not exceed 500 characters",
   }),
   lessonId: Joi.string().required().messages({
@@ -18,9 +18,9 @@ export const askQuestionSchema = Joi.object({
 
 // Answer Question Validation
 export const answerQuestionSchema = Joi.object({
-  answer: Joi.string().min(5).max(1000).required().messages({
+  answer: Joi.string().min(2).max(1000).required().messages({
     "string.empty": "Answer is required",
-    "string.min": "Answer must be at least 5 characters",
+    "string.min": "Answer must be at least 2 characters",
     "string.max": "Answer must not exceed 1000 characters",
   }),
 });

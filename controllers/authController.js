@@ -22,91 +22,91 @@ const Permission = require("../models/Permission");
 // ==========================
 // REGISTER
 // ==========================
-const register = async (req, res, next) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+// const register = async (req, res, next) => {
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
 
-  try {
-    const { name, email, phone, password, role, courseId } = req.body;
+//   try {
+//     const { name, email, phone, password, role, courseId } = req.body;
 
-    // 1. Check if user already exists
-    const existingUser = await User.findOne({ email }).session(session);
-    if (existingUser) {
-      throw new ConflictError("Email already in use.");
-    }
+//     // 1. Check if user already exists
+//     const existingUser = await User.findOne({ email }).session(session);
+//     if (existingUser) {
+//       throw new ConflictError("Email already in use.");
+//     }
 
-    // 2. Find role
-    const roleDoc = await Role.findOne({ role_name: role }).session(session);
-    if (!roleDoc) {
-      throw new BadRequestError(`Role '${role}' not found.`);
-    }
+//     // 2. Find role
+//     const roleDoc = await Role.findOne({ role_name: role }).session(session);
+//     if (!roleDoc) {
+//       throw new BadRequestError(`Role '${role}' not found.`);
+//     }
 
-    // 3. Hash password
-    const passwordHash = await bcrypt.hash(password, 10);
+//     // 3. Hash password
+//     const passwordHash = await bcrypt.hash(password, 10);
 
-    // 4. Create user
-    const newUser = await User.create(
-      [{
-        name,
-        email,
-        phone,
-        passwordHash,
-        roleId: roleDoc._id,
-        status: true,
-      }],
-      { session }
-    );
+//     // 4. Create user
+//     const newUser = await User.create(
+//       [{
+//         name,
+//         email,
+//         phone,
+//         passwordHash,
+//         roleId: roleDoc._id,
+//         status: true,
+//       }],
+//       { session }
+//     );
 
-    const user = newUser[0]; // since .create with array returns an array
-    let course = null
-    // 5. If Student, validate and create student record
-    if (role.toLowerCase() === "student") {
-      if (!courseId) {
-        throw new BadRequestError("Course ID is required for students.");
-      }
+//     const user = newUser[0]; // since .create with array returns an array
+//     let course = null
+//     // 5. If Student, validate and create student record
+//     if (role.toLowerCase() === "student") {
+//       if (!courseId) {
+//         throw new BadRequestError("Course ID is required for students.");
+//       }
 
-      if (!mongoose.Types.ObjectId.isValid(courseId)) {
-        throw new BadRequestError("Invalid Course ID format.");
-      }
+//       if (!mongoose.Types.ObjectId.isValid(courseId)) {
+//         throw new BadRequestError("Invalid Course ID format.");
+//       }
 
-      const courseExists = await Course.findById(courseId).session(session);
-      let course = courseExists;
-      if (!courseExists) {
-        throw new NotFoundError("Course not found.");
-      }
+//       const courseExists = await Course.findById(courseId).session(session);
+//       let course = courseExists;
+//       if (!courseExists) {
+//         throw new NotFoundError("Course not found.");
+//       }
 
-      await Student.create(
-        [{
-          userId: user._id,
-          courseId,
-          enrollmentDate: new Date(),
-        }],
-        { session }
-      );
-    }
+//       await Student.create(
+//         [{
+//           userId: user._id,
+//           courseId,
+//           enrollmentDate: new Date(),
+//         }],
+//         { session }
+//       );
+//     }
     
-    // commit transaction
-    await session.commitTransaction();
-    session.endSession();
+//     // commit transaction
+//     await session.commitTransaction();
+//     session.endSession();
 
-    res.status(201).json({
-      message: `${role} registered successfully.`,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        course,
-        role,
-      },
-    });
-  } catch (err) {
-    // Something failed — rollback transaction
-    console.log(err)
-    await session.abortTransaction();
-    session.endSession();
-    next(err);
-  }
-};
+//     res.status(201).json({
+//       message: `${role} registered successfully.`,
+//       user: {
+//         id: user._id,
+//         name: user.name,
+//         email: user.email,
+//         course,
+//         role,
+//       },
+//     });
+//   } catch (err) {
+//     // Something failed — rollback transaction
+//     console.log(err)
+//     await session.abortTransaction();
+//     session.endSession();
+//     next(err);
+//   }
+// };
 
 // ==========================
 // LOGIN
@@ -226,6 +226,6 @@ const refresh = async (req, res, next) => {
 
 module.exports = {
   login,
-  register,
+  // register,
   refresh,
 };

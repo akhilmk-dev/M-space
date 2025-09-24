@@ -5,7 +5,7 @@ const validateMiddleware = require('../utils/validate');
 const { registerSchema, loginSchema, refreshTokenSchema } = require('../validations/authValidation');
 
 // POST /api/V1/auth/register
-router.post('/register',validateMiddleware(registerSchema), authController.register);
+// router.post('/register',validateMiddleware(registerSchema), authController.register);
 
 // POST /api/V1/auth/login
 router.post('/login',validateMiddleware(loginSchema),  authController.login);
