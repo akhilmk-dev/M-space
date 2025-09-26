@@ -34,16 +34,16 @@ exports.createModule = catchAsync(async (req, res) => {
 
 // Get All Modules
 exports.getAllModules = catchAsync(async (req, res) => {
-  //  Pagination
+  // Pagination
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  //  Search
+  // Search
   const search = req.query.search || '';
   const searchRegex = new RegExp(search, 'i');
 
-  // 3. Sort parsing from `sortBy=field:direction`
+  // Sort parsing from `sortBy=field:direction`
   let sortField = 'createdAt';
   let sortOrder = -1; // default: descending
 
@@ -53,22 +53,26 @@ exports.getAllModules = catchAsync(async (req, res) => {
     sortOrder = order === 'asc' ? 1 : -1;
   }
 
-  // 4. Build query
+  // Course filter
+  const { courseId } = req.query;
+
+  // Build query
   const query = {
     title: { $regex: searchRegex },
+    ...(courseId ? { courseId } : {}), // Add course filter if provided
   };
 
-  // 5. Total count
+  // Total count
   const totalModules = await Module.countDocuments(query);
 
-  // 6. Fetch data
+  // Fetch data
   const modules = await Module.find(query)
     .populate('courseId', 'title') // populate course title
     .sort({ [sortField]: sortOrder })
     .skip(skip)
     .limit(limit);
 
-  // 7. Respond
+  // Respond
   res.status(200).json({
     status: 'success',
     page,
@@ -78,16 +82,6 @@ exports.getAllModules = catchAsync(async (req, res) => {
     data: modules,
   });
 });
-
-// Get Module by ID
-// exports.getModuleById = catchAsync(async (req, res) => {
-//   const { moduleId } = req.params;
-//   const module = await Module.findById(moduleId).populate('courseId', 'title');
-
-//   if (!module) throw new NotFoundError('Module not found');
-
-//   res.status(200).json({ status: 'success', data: module });
-// });
 
 exports.getModuleById = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
@@ -197,27 +191,25 @@ exports.updateModule = catchAsync(async (req, res) => {
 });
 
 // Get Modules by Course ID
-// exports.getModulesByCourseId = catchAsync(async (req, res) => {
-//   const { courseId } = req.params;
+exports.getModulesForDropdown = catchAsync(async (req, res) => {
+  const { courseId } = req.params;
 
-//   if (!courseId) {
-//     throw new BadRequestError('Course ID is required');
-//   }
+  if (!courseId) {
+    throw new BadRequestError('Course ID is required');
+  }
 
-//   const course = await Course.findById(courseId);
-//   if (!course) {
-//     throw new NotFoundError('Course not found');
-//   }
+  const course = await Course.findById(courseId);
+  if (!course) {
+    throw new NotFoundError('Course not found');
+  }
 
-//   const modules = await Module.find({ courseId })
-//     .sort({ orderIndex: 1 }) // optional: sort by orderIndex
-//     .populate('courseId', 'title');
+  const modules = await Module.find({ courseId }).select('title _id')
 
-//   res.status(200).json({
-//     status: 'success',
-//     data: modules,
-//   });
-// });
+  res.status(200).json({
+    status: 'success',
+    data: modules,
+  });
+});
 
 // Helper to format minutes into "X hr Y min"
 const formatDuration = (minutes) => {

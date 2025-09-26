@@ -49,8 +49,11 @@ const lessonValidationSchema = Joi.object({
           "any.only": "Content type must be one of video, file, text",
           "any.required": "Content type is required",
         }),
-        contentURL: Joi.string().uri().required().messages({
-          "string.uri": "Content URL must be a valid URL",
+        contentURL: Joi.string()
+        .pattern(/^https?:\/\/[^\s]+$/) // simple regex for HTTP/HTTPS URLs
+        .required()
+        .messages({
+          "string.pattern.base": "Content URL must be a valid HTTP/HTTPS URL",
           "any.required": "Content URL is required",
         }),
         duration: Joi.number().integer().min(1).optional().messages({

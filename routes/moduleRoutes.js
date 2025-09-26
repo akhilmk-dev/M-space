@@ -12,5 +12,6 @@ router.get('/:moduleId',authenticate, moduleController.getModuleById);
 router.put('/:moduleId',authenticate,validateMiddleware(moduleValidationSchema), moduleController.updateModule);
 router.delete('/:moduleId',authenticate, moduleController.deleteModule);
 router.get('/course/:courseId',authenticate,moduleController.getModulesByCourseId)
+router.get('/dropdown/:courseId',authenticate,moduleController.getModulesForDropdown)
 
 module.exports = router;

@@ -77,7 +77,7 @@ exports.getAllChapters = catchAsync(async (req, res) => {
 
   // Fetch
   const chapters = await Chapter.find(query)
-    .populate('moduleId', 'title')   
+    .populate('moduleId', 'title _id courseId')   
     .sort({ [sortField]: sortOrder })
     .skip(skip)
     .limit(limit);
