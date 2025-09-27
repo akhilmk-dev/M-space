@@ -1,3 +1,4 @@
+const { default: mongoose } = require('mongoose');
 const checkDependencies = require('../helper/checkDependencies');
 const Assignment = require('../models/Assignment');
 const Chapter = require('../models/Chapter');
