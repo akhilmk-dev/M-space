@@ -100,34 +100,48 @@ const reviewAssignment = async (req, res, next) => {
 };
 
 const getSubmissionsByStudent = async (req, res, next) => {
-    try {
-        const { studentId } = req.params;
-        const {status} = req.query
-        const filter = {studentId};
-        if(status){
-          filter.status = status
-        }
-        if (!studentId) {
-            throw new BadRequestError("Student ID is required.");
-        }
+  try {
+    const { studentId } = req.params;
+    const { status, page = 1, limit = 10 } = req.query;
 
-        const submissions = await AssignmentSubmission.find(filter)
-            .populate("assignmentId", "title deadline description")
-            .populate("studentId", "name email")
-            .sort({ createdAt: -1 });
-
-        // if (!submissions || submissions.length === 0) {
-        //     throw new NotFoundError("No submissions found for this student.");
-        // }
-
-        res.status(200).json({
-            message: "Submissions fetched successfully.",
-            count: submissions.length,
-            data: submissions,
-        });
-    } catch (err) {
-        next(err);
+    if (!studentId) {
+      throw new BadRequestError("Student ID is required.");
     }
+
+    // Build filter
+    const filter = { studentId };
+    if (status) {
+      filter.status = status;
+    }
+
+    // Convert pagination params
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.max(1, parseInt(limit));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Count total submissions for pagination metadata
+    const totalSubmissions = await AssignmentSubmission.countDocuments(filter);
+
+    // Fetch paginated submissions
+    const submissions = await AssignmentSubmission.find(filter)
+      .populate("assignmentId", "title deadline description")
+      .populate("studentId", "name email")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    res.status(200).json({
+      message: "Submissions fetched successfully.",
+      count: submissions.length,
+      data: submissions,
+      totalSubmissions,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(totalSubmissions / limitNum),
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 const getSubmissionById = async (req, res, next) => {

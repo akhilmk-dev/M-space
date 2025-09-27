@@ -239,9 +239,14 @@ const getAssignmentById = async (req, res, next) => {
 const getAssignmentsByCreatedBy = async (req, res, next) => {
   try {
     const { id } = req.params; // user ID of creator
-    const { status } = req.query; // optional status filter
+    const { status, page = 1, limit = 10 } = req.query; // pagination
 
-    // 1. Build the query object
+    // 1. Validate user ID
+    if (!id) {
+      return res.status(400).json({ status: "error", message: "Creator ID is required" });
+    }
+
+    // 2. Build the query object
     const filter = { createdBy: id };
 
     // Optional: validate and apply status filter
@@ -256,16 +261,31 @@ const getAssignmentsByCreatedBy = async (req, res, next) => {
       filter.status = status;
     }
 
-    // 2. Fetch assignments by createdBy (with optional status)
+    // 3. Convert pagination params
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.max(1, parseInt(limit));
+    const skip = (pageNum - 1) * limitNum;
+
+    // 4. Count total assignments for pagination metadata
+    const totalAssignments = await Assignment.countDocuments(filter);
+
+    // 5. Fetch paginated assignments
     const assignments = await Assignment.find(filter)
       .populate("createdBy", "name email")
       .populate("assignedTo", "name email")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
 
+    // 6. Send response with pagination info
     res.status(200).json({
       status: "success",
       count: assignments.length,
-      assignments,
+      data: assignments,
+      totalAssignments,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(totalAssignments / limitNum),
     });
   } catch (err) {
     next(err);

@@ -14,6 +14,7 @@ const {
 
 const { default: mongoose } = require("mongoose");
 const Student = require("../models/Student");
+const checkDependencies = require("../helper/checkDependencies");
 
 const createUser = async (req, res, next) => {
   const session = await mongoose.startSession();
@@ -301,31 +302,24 @@ const deleteUserCascade = async (req, res, next) => {
       throw new BadRequestError("Invalid userId format.");
     }
 
-    const user = await User.findById(userId).session(session);
+    const user = await User.findById(userId).populate("roleId").session(session);
     if (!user) throw new NotFoundError("User not found.");
 
-    // Get all collections in the DB
-    const collections = Object.keys(mongoose.connection.collections);
-
-    for (const collectionName of collections) {
-      const collection = mongoose.connection.collections[collectionName];
-
-      // Find fields that might reference a user
-      // Common names: userId, studentId, createdBy, uploadedBy, tutorId
-      const possibleFields = ["userId", "studentId", "createdBy", "uploadedBy", "tutorId"];
-
-      // Build dynamic $or query
-      const query = {
-        $or: possibleFields.map((field) => ({ [field]: user._id })),
-      };
-
-      // Delete matching documents
-      await collection.deleteMany(query).catch((err) => {
-        // Ignore errors for collections that don’t have these fields
-      });
+    // Prevent deleting admin role users
+    if (user.roleId && user.roleId.role_name.toLowerCase() === "admin") {
+      throw new ConflictError("Can't delete a user with admin role");
     }
 
-    // Finally, delete the user
+    // Step 1: Check dependencies before deleting
+    await checkDependencies("User", user._id, [
+      "userId",
+      "studentId",
+      "createdBy",
+      "uploadedBy",
+      "tutorId",
+    ]);
+
+    // Step 2: Delete user only if no dependencies found
     const deletedUser = await User.findByIdAndDelete(userId).session(session);
 
     await session.commitTransaction();

@@ -9,6 +9,7 @@ const {
     NotFoundError,
     ConflictError,
 } = require("../utils/customErrors");
+const checkDependencies = require("../helper/checkDependencies");
 
 // Create tutor
 async function createTutor(req, res, next) {
@@ -274,42 +275,54 @@ async function updateTutor(req, res, next) {
 
 // Delete tutor
 async function deleteTutor(req, res, next) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    try {
-        const { tutorId } = req.params;
+  try {
+    const { tutorId } = req.params;
 
-        if (!mongoose.Types.ObjectId.isValid(tutorId)) {
-            throw new BadRequestError("Invalid tutor ID");
-        }
-
-        const user = await User.findById(tutorId).session(session);
-        if (!user) {
-            throw new NotFoundError("User not found");
-        }
-
-        const role = await Roles.findById(user.roleId).session(session);
-        if (!role || !/tutor/i.test(role.role_name)) {
-            throw new BadRequestError("User is not a tutor");
-        }
-
-        await Tutor.deleteOne({ userId: tutorId }).session(session);
-        await User.deleteOne({ _id: tutorId }).session(session);
-
-        await session.commitTransaction();
-        session.endSession();
-
-        res.json({
-            status: "success",
-            message: "Tutor deleted successfully",
-            data: user,
-        });
-    } catch (err) {
-        await session.abortTransaction();
-        session.endSession();
-        next(err);
+    if (!mongoose.Types.ObjectId.isValid(tutorId)) {
+      throw new BadRequestError("Invalid tutor ID");
     }
+
+    const user = await User.findById(tutorId).session(session);
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    // Check role is tutor
+    const role = await Roles.findById(user.roleId).session(session);
+    if (!role || !/tutor/i.test(role.role_name)) {
+      throw new BadRequestError("User is not a tutor");
+    }
+
+    // Prevent deletion if dependencies exist
+    await checkDependencies("Tutor", user._id, [
+      "tutorId",
+      "createdBy",
+      "uploadedBy",
+      "answeredBy"
+    ]);
+
+    //  Delete Tutor record
+    await Tutor.deleteOne({ userId: tutorId }).session(session);
+
+    // Delete User record
+    await User.deleteOne({ _id: tutorId }).session(session);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({
+      status: "success",
+      message: "Tutor deleted successfully",
+      data: user,
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    next(err);
+  }
 }
 
 // Get tutors by courseId

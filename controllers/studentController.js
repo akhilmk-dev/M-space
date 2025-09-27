@@ -5,6 +5,7 @@ const Student = require('../models/Student');
 const { BadRequestError, NotFoundError, ConflictError } = require('../utils/customErrors'); // adjust your error classes
 const Roles = require('../models/Roles');
 const bcrypt = require("bcrypt");
+const checkDependencies = require('../helper/checkDependencies');
 
 // Create only student (you already have)
 async function createStudent(req, res, next) {
@@ -279,22 +280,32 @@ async function deleteStudent(req, res, next) {
       throw new BadRequestError("User is not a student");
     }
 
+    // 🚫 Prevent deletion if dependencies exist
+    await checkDependencies("Student", user._id, [
+      "studentId"
+    ]);
+
     // Delete Student record
     await Student.deleteOne({ userId: studentId }).session(session);
 
-    // Optionally delete user or set inactive
+    // Delete User record
     const deletedStudent = await User.deleteOne({ _id: studentId }).session(session);
 
     await session.commitTransaction();
     session.endSession();
 
-    res.json({ status: "success", message: "Student deleted successfully", data: user });
+    res.json({
+      status: "success",
+      message: "Student deleted successfully",
+      data: deletedStudent,
+    });
   } catch (err) {
     await session.abortTransaction();
     session.endSession();
     next(err);
   }
 }
+
 
 const getStudentsByCourseId = async (req, res, next) => {
   try {

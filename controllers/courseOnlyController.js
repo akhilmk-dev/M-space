@@ -106,56 +106,50 @@ exports.updateCourse = catchAsync(async (req, res) => {
 });
 
 // Delete Course
-exports.deleteCourse = catchAsync(async (req, res) => {
-  const user = await User.findById(req.user.id).populate('roleId');
-  const role = user?.roleId?.role_name?.toLowerCase();
+exports.deleteCourse = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-  if (role === "student") {
-    throw new ForbiddenError("User doesn't have permission to delete course");
+  try {
+    const user = await User.findById(req.user.id).populate("roleId").session(session);
+    const role = user?.roleId?.role_name?.toLowerCase();
+
+    // Prevent student from deleting courses
+    if (role === "student") {
+      throw new ForbiddenError("User doesn't have permission to delete course");
+    }
+
+    const { courseId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      throw new BadRequestError("Invalid course ID");
+    }
+
+    const course = await Course.findById(courseId).session(session);
+    if (!course) throw new NotFoundError("Course not found");
+
+    //  Prevent deletion if dependencies exist
+    await checkDependencies("Course", course._id, [
+      "courseId"
+    ]);
+
+    // Delete the course
+    const deletedCourse = await Course.findByIdAndDelete(courseId).session(session);
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      status: "success",
+      message: "Course deleted successfully",
+      data: deletedCourse,
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    next(err);
   }
-
-  const { courseId } = req.params;
-
-  const course = await Course.findById(courseId);
-  if (!course) throw new NotFoundError("Course not found");
-
-  // ===== Start Cascade Deletion =====
-  const modules = await Module.find({ courseId });
-  const moduleIds = modules.map(m => m._id);
-
-  const chapters = await Chapter.find({ moduleId: { $in: moduleIds } });
-  const chapterIds = chapters.map(c => c._id);
-
-  const lessons = await Lesson.find({ chapterId: { $in: chapterIds } });
-  const lessonIds = lessons.map(l => l._id);
-
-  // 1. Delete Assignments
-  await Assignment.deleteMany({ lessonId: { $in: lessonIds } });
-
-  // Add similar deletion for Quizzes, Media, Notes, etc.
-  // await Quiz.deleteMany({ lessonId: { $in: lessonIds } });
-  // await Media.deleteMany({ lessonId: { $in: lessonIds } });
-
-  // 2. Delete Lessons
-  await Lesson.deleteMany({ chapterId: { $in: chapterIds } });
-
-  // 3. Delete Chapters
-  await Chapter.deleteMany({ moduleId: { $in: moduleIds } });
-
-  // 4. Delete Modules
-  await Module.deleteMany({ courseId });
-
-  // 5. Delete Course
-  const deletedCourse = await Course.findByIdAndDelete(courseId);
-
-  // ===== End Cascade Deletion =====
-
-  res.status(200).json({
-    status: 'success',
-    message: 'Course and all related data deleted successfully',
-    data: deletedCourse
-  });
-});
+};
 
 exports.geFullCourseById = async (req, res, next) => {
   try {

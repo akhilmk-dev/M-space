@@ -85,28 +85,39 @@ exports.getAllModules = catchAsync(async (req, res) => {
 
 exports.getModuleById = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
-  const user = await User.findById(req.user.id).populate('roleId');
+  const { page = 1, limit = 10 } = req.query; // pagination params
+  const user = await User.findById(req.user.id).populate("roleId");
+
+  // Validate page/limit
+  const pageNum = Math.max(1, parseInt(page));
+  const limitNum = Math.max(1, parseInt(limit));
+  const skip = (pageNum - 1) * limitNum;
 
   // Find the module and its course
-  const module = await Module.findById(moduleId).populate('courseId', 'title');
-  if (!module) throw new NotFoundError('Module not found');
+  const module = await Module.findById(moduleId).populate("courseId", "title");
+  if (!module) throw new NotFoundError("Module not found");
 
-  // Find all chapters linked to this module
-  const chapters = await Chapter.find({ moduleId }).lean();
+  // Count total chapters for pagination metadata
+  const totalChapters = await Chapter.countDocuments({ moduleId });
+
+  // Fetch paginated chapters
+  const chapters = await Chapter.find({ moduleId })
+    .skip(skip)
+    .limit(limitNum)
+    .lean();
 
   let studentLessonCompletions = [];
 
   // If user is a student, fetch completed lessons and currentTime
-  if (user?.roleId?.role_name === 'Student') {
+  if (user?.roleId?.role_name === "Student") {
     studentLessonCompletions = await LessonCompletion.find({ studentId: user._id })
-      .select('lessonId currentTime isCompleted') // include isCompleted
+      .select("lessonId currentTime isCompleted")
       .lean();
-    
-    // Convert to Map for faster lookup: lessonId => { currentTime, isCompleted }
+
     studentLessonCompletions = new Map(
-      studentLessonCompletions.map(lc => [
+      studentLessonCompletions.map((lc) => [
         lc.lessonId.toString(),
-        { currentTime: lc.currentTime || 0, isCompleted: lc.isCompleted || false }
+        { currentTime: lc.currentTime || 0, isCompleted: lc.isCompleted || false },
       ])
     );
   }
@@ -117,7 +128,11 @@ exports.getModuleById = catchAsync(async (req, res) => {
       const lessons = await Lesson.find({ chapterId: chapter._id }).lean();
 
       const lessonsWithCompletion = lessons.map((lesson) => {
-        const completion = studentLessonCompletions.get(lesson._id.toString()) || { currentTime: 0, isCompleted: false };
+        const completion =
+          studentLessonCompletions.get(lesson._id.toString()) || {
+            currentTime: 0,
+            isCompleted: false,
+          };
         return {
           ...lesson,
           isCompleted: completion.isCompleted,
@@ -127,21 +142,22 @@ exports.getModuleById = catchAsync(async (req, res) => {
 
       return {
         ...chapter,
-        lessons: lessonsWithCompletion
+        lessons: lessonsWithCompletion,
       };
     })
   );
 
-  // Prepare final module data
-  const moduleData = {
-    ...module.toObject(),
-    chapters: chaptersWithLessons
-  };
-
-  // Send response
+  // Final response with pagination metadata
   res.status(200).json({
-    status: 'success',
-    data: moduleData
+    status: "success",
+    data: {
+      module: module.toObject(),
+      chapters: chaptersWithLessons,
+      totalChapters,
+      page: pageNum,
+      limit: limitNum,
+      totalPages: Math.ceil(totalChapters / limitNum),
+    },
   });
 });
 
@@ -226,7 +242,7 @@ const formatDuration = (minutes) => {
 
 exports.getModulesByCourseId = catchAsync(async (req, res) => {
   const { courseId } = req.params;
-  const { status } = req.query; //  read status filter from query
+  const { status, page = 1, limit = 10 } = req.query; 
   const studentId = req.user.id;
 
   if (!courseId) {
@@ -238,8 +254,19 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
     throw new NotFoundError("Course not found");
   }
 
-  const modules = await Module.find({ courseId })
+  // Pagination calculations
+  const pageNum = Math.max(1, parseInt(page));
+  const limitNum = Math.max(1, parseInt(limit));
+  const skip = (pageNum - 1) * limitNum;
+
+  // Count total modules for pagination metadata
+  const totalModules = await Module.countDocuments({ courseId });
+
+  // Fetch modules with pagination
+  let modules = await Module.find({ courseId })
     .sort({ orderIndex: 1 })
+    .skip(skip)
+    .limit(limitNum)
     .lean();
 
   const moduleIds = modules.map((mod) => mod._id);
@@ -303,13 +330,12 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
           ? Math.round((completedLessons / totalLessons) * 100)
           : 0;
 
-      // Check if module is fully completed
       const moduleStatus =
         totalLessons > 0 && completedLessons === totalLessons
           ? "completed"
           : "inprogress";
 
-      // Upsert into ModuleCompletion collection
+      // Update or insert completion record
       await ModuleCompletion.findOneAndUpdate(
         { studentId, moduleId: mod._id },
         { status: moduleStatus },
@@ -325,7 +351,7 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
     })
   );
 
-  //  Apply filtering if status query is provided
+  // Apply status filtering
   if (status) {
     enrichedModules = enrichedModules.filter(
       (mod) => mod.status === status.toLowerCase()
@@ -335,9 +361,12 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
   res.status(200).json({
     status: "success",
     data: enrichedModules,
+    totalModules,
+    page: pageNum,
+    limit: limitNum,
+    totalPages: Math.ceil(totalModules / limitNum),
   });
 });
-
 
 
 // Delete Module
