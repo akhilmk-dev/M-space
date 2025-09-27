@@ -7,6 +7,7 @@ const Roles = require('../models/Roles');
 const bcrypt = require("bcrypt");
 const checkDependencies = require('../helper/checkDependencies');
 const Tutor = require('../models/Tutor');
+const AssignmentSubmission = require('../models/AssignmentSubmission');
 
 // Create only student (you already have)
 async function createStudent(req, res, next) {
@@ -449,11 +450,82 @@ const listStudentsByTutor = async (req, res, next) => {
 };
 
 
+// get student details by id
+const getStudentDetailsWithSubmissions = async (req, res, next) => {
+  try {
+    const { studentId } = req.params;
+    const { status, page = 1, limit = 10 } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      throw new BadRequestError("Invalid Student ID.");
+    }
+
+    //  Get student user
+    const user = await User.findById(studentId).lean();
+    if (!user) throw new NotFoundError("Student not found.");
+
+    //  Get student record (enrollment info)
+    const studentInfo = await Student.findOne({ userId: studentId }).lean();
+    if (!studentInfo) throw new NotFoundError("Student enrollment not found.");
+
+    //  Get course details
+    const course = await Course.findById(studentInfo.courseId).lean();
+
+    //  Attendance percentage (dummy)
+    const attendancePercentage = Math.floor(Math.random() * (100 - 60 + 1)) + 60; 
+    // random between 60–100
+
+    // Fetch submissions (with filters + pagination)
+    const filter = { studentId: studentInfo.userId }; // note: studentInfo._id (not userId)
+    if (status) {
+      filter.status = status;
+    }
+
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.max(1, parseInt(limit));
+    const skip = (pageNum - 1) * limitNum;
+
+    const totalSubmissions = await AssignmentSubmission.countDocuments(filter);
+
+    const submissions = await AssignmentSubmission.find(filter)
+      .populate("assignmentId", "title deadline description")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    // Response
+    res.status(200).json({
+      message: "Student details fetched successfully.",
+      student: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        course: course ? { id: course._id, title: course.title } : null,
+        attendancePercentage,
+      },
+      submissions: {
+        data: submissions,
+        count: submissions.length,
+        total: totalSubmissions,
+        page: pageNum,
+        limit: limitNum,
+        totalPages: Math.ceil(totalSubmissions / limitNum),
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 module.exports = {
   createStudent,
   listStudents,
   updateStudent,
   deleteStudent,
   getStudentsByCourseId,
-  listStudentsByTutor
+  listStudentsByTutor,
+  getStudentDetailsWithSubmissions
 };
