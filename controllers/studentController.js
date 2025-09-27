@@ -74,10 +74,11 @@ async function createStudent(req, res, next) {
 
     res.status(201).json({
       message: "Student created successfully.",
-      student: {
+      data: {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
         course: {
           id: course._id,
           title: course.title,
@@ -298,7 +299,7 @@ async function deleteStudent(req, res, next) {
     res.json({
       status: "success",
       message: "Student deleted successfully",
-      data: deletedStudent,
+      data: user,
     });
   } catch (err) {
     await session.abortTransaction();

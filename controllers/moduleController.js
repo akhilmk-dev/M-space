@@ -161,7 +161,6 @@ exports.getModuleById = catchAsync(async (req, res) => {
   });
 });
 
-
 // Update Module
 exports.updateModule = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
@@ -244,7 +243,7 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
   const { courseId } = req.params;
   const { status, page = 1, limit = 10 } = req.query; 
   const studentId = req.user.id;
-
+  
   if (!courseId) {
     throw new BadRequestError("Course ID is required");
   }
