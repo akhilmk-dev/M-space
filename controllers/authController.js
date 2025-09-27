@@ -131,8 +131,10 @@ const login = async (req, res, next) => {
       throw new InternalServerError("Invalid credentials.");
     }
 
-    // 3. Check role match (skip if Admin)
-    if (user.roleId?.role_name !== "Admin") {
+    const currentRole = user.roleId?.role_name;
+  
+    if (["Student", "Tutor"].includes(currentRole)) {
+      // Strict role match only for Student and Tutor
       if (user.roleId?._id?.toString() !== roleDoc._id.toString()) {
         throw new InternalServerError("Invalid Email");
       }
@@ -171,12 +173,13 @@ const login = async (req, res, next) => {
 
     // 8. For non-student/tutor roles, use roleId.permissions instead
     if (roleDoc.role_name != 'Student' && roleDoc.role_name != 'Tutor') {
+      const role = await Role.findById(user.roleId?._id)
       let permissions = [];
 
-      if (Array.isArray(roleDoc?.permissions) && roleDoc.permissions.length > 0) {
+      if (Array.isArray(role?.permissions) && role.permissions.length > 0) {
         // Fetch permission documents by ID
         permissions = await Permission.find({
-          _id: { $in: roleDoc.permissions }
+          _id: { $in: role.permissions }
         });
       }
 
