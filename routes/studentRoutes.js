@@ -1,5 +1,5 @@
 const express = require('express');
-const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId } = require('../controllers/studentController');
+const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId, listStudentsByTutor } = require('../controllers/studentController');
 const { authenticate } = require('../middleware/authMiddleware');
 const { addStudentSchema, updateStudentSchema } = require('../validations/studentValidation');
 const validateMiddleware = require('../utils/validate');
@@ -18,5 +18,7 @@ router.get('/',authenticate, listStudents );
 router.delete('/:studentId',authenticate, deleteStudent);
 
 router.get('/by-course/:courseId',authenticate, getStudentsByCourseId);
+
+router.get('/by-tutor/:tutorId',authenticate,listStudentsByTutor)
 
 module.exports = router;

@@ -1,3 +1,4 @@
+const checkDependencies = require('../helper/checkDependencies');
 const Chapter = require('../models/Chapter');
 const Module = require('../models/Module');
 const catchAsync = require('../utils/catchAsync');
@@ -153,11 +154,22 @@ exports.updateChapter = catchAsync(async (req, res) => {
 // Delete Chapter
 exports.deleteChapter = catchAsync(async (req, res) => {
   const { chapterId } = req.params;
-  const chapter = await Chapter.findByIdAndDelete(chapterId);
 
-  if (!chapter) throw new NotFoundError('Chapter not found');
+  // Check if chapter exists
+  const chapter = await Chapter.findById(chapterId);
+  if (!chapter) throw new NotFoundError("Chapter not found");
 
-  res.status(200).json({ status: 'success', message: 'Chapter deleted successfully',data:chapter });
+  // Prevent deletion if dependencies exist
+  await checkDependencies("Chapter", chapterId, ["chapterId"]);
+
+  // Delete chapter
+  const deletedChapter = await Chapter.findByIdAndDelete(chapterId);
+
+  res.status(200).json({
+    status: "success",
+    message: "Chapter deleted successfully",
+    data: deletedChapter,
+  });
 });
 
 // Get Chapters by Module ID

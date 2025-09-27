@@ -6,6 +6,7 @@ const { BadRequestError, NotFoundError, ConflictError } = require('../utils/cust
 const Roles = require('../models/Roles');
 const bcrypt = require("bcrypt");
 const checkDependencies = require('../helper/checkDependencies');
+const Tutor = require('../models/Tutor');
 
 // Create only student (you already have)
 async function createStudent(req, res, next) {
@@ -171,7 +172,6 @@ async function listStudents(req, res, next) {
   }
 }
 
-
 // Update student
 async function updateStudent(req, res, next) {
   const session = await mongoose.startSession();
@@ -280,7 +280,7 @@ async function deleteStudent(req, res, next) {
       throw new BadRequestError("User is not a student");
     }
 
-    // 🚫 Prevent deletion if dependencies exist
+    // Prevent deletion if dependencies exist
     await checkDependencies("Student", user._id, [
       "studentId"
     ]);
@@ -345,10 +345,114 @@ const getStudentsByCourseId = async (req, res, next) => {
   }
 };
 
+// list students by tutor
+const listStudentsByTutor = async (req, res, next) => {
+  try {
+    const { tutorId } = req.params;
+    const { page = 1, limit = 10, search = "", courseId } = req.query;
+
+    if (!tutorId) throw new BadRequestError("Tutor ID is required.");
+
+    // Pagination
+    const skip = (page - 1) * limit;
+
+    // Search regex
+    const searchRegex = new RegExp(search, "i");
+
+    // Fetch tutor and their courses
+    const tutor = await Tutor.findById(tutorId).lean();
+    if (!tutor) throw new NotFoundError("Tutor not found.");
+
+    let tutorCourseIds = tutor.courseIds || [];
+    if (courseId) {
+      // Filter courses if specific courseId is provided
+      if (!tutorCourseIds.includes(courseId)) {
+        return res.json({
+          status: "success",
+          data: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+        });
+      }
+      tutorCourseIds = [courseId];
+    }
+
+    if (tutorCourseIds.length === 0) {
+      return res.json({
+        status: "success",
+        data: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      });
+    }
+
+    // Find students in these courses
+    const studentRole = await Roles.findOne({ role_name: /student/i });
+    if (!studentRole) throw new NotFoundError("Student role not found.");
+
+    const match = {
+      roleId: studentRole._id,
+    };
+
+    const studentInfos = await Student.find({
+      courseId: { $in: tutorCourseIds },
+    })
+      .populate({
+        path: "userId",
+        match: {
+          $or: [
+            { name: { $regex: searchRegex } },
+            { email: { $regex: searchRegex } },
+            { phone: { $regex: searchRegex } },
+          ],
+        },
+        select: "name email phone roleId",
+        populate: { path: "roleId", select: "role_name" },
+      })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Filter out students whose userId is null due to search
+    const students = studentInfos
+      .filter((s) => s.userId)
+      .map((s) => ({
+        id: s.userId._id,
+        name: s.userId.name,
+        email: s.userId.email,
+        phone: s.userId.phone,
+        role: s.userId.roleId.role_name,
+        course: { id: s.courseId, title: s.courseTitle || "" },
+        enrollmentDate: s.enrollmentDate,
+      }));
+
+    const total = await Student.countDocuments({
+      courseId: { $in: tutorCourseIds },
+    });
+
+    res.json({
+      status: "success",
+      data: students,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(total / limit),
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 module.exports = {
   createStudent,
   listStudents,
   updateStudent,
   deleteStudent,
-  getStudentsByCourseId
+  getStudentsByCourseId,
+  listStudentsByTutor
 };
