@@ -360,13 +360,14 @@ const listStudentsByTutor = async (req, res, next) => {
     const searchRegex = new RegExp(search, "i");
 
     // Fetch tutor and their courses
-    const tutor = await Tutor.findById(tutorId).lean();
+    const tutor = await Tutor.findOne({userId:tutorId}).lean();
     if (!tutor) throw new NotFoundError("Tutor not found.");
 
     let tutorCourseIds = tutor.courseIds || [];
     if (courseId) {
-      // Filter courses if specific courseId is provided
-      if (!tutorCourseIds.includes(courseId)) {
+      const tutorCourseIdsStr = tutorCourseIds.map(id => id.toString());
+
+      if (!tutorCourseIdsStr.includes(courseId.toString())) {
         return res.json({
           status: "success",
           data: [],
@@ -421,12 +422,12 @@ const listStudentsByTutor = async (req, res, next) => {
     const students = studentInfos
       .filter((s) => s.userId)
       .map((s) => ({
-        id: s.userId._id,
+        _id: s.userId._id,
         name: s.userId.name,
         email: s.userId.email,
         phone: s.userId.phone,
         role: s.userId.roleId.role_name,
-        course: { id: s.courseId, title: s.courseTitle || "" },
+        courseId:s.courseId,
         enrollmentDate: s.enrollmentDate,
       }));
 

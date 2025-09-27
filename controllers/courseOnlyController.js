@@ -156,44 +156,68 @@ exports.geFullCourseById = async (req, res, next) => {
   try {
     const { courseId } = req.params;
 
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    const skip = (page - 1) * limit;
+
     // Fetch the course
-    const course = await Course.findById(courseId).select('-__v -updatedAt');
+    const course = await Course.findById(courseId).select("-__v -updatedAt");
     if (!course) {
       throw new NotFoundError("Course not found.");
     }
 
-    // Fetch related modules
-    const modules = await Module.find({ courseId }).select('-__v -updatedAt');
-    const moduleIds = modules.map(m => m._id);
+    // Count total modules
+    const totalModules = await Module.countDocuments({ courseId });
+
+    // Fetch related modules with pagination
+    const modules = await Module.find({ courseId })
+      .select("-__v -updatedAt")
+      .skip(skip)
+      .limit(limit);
+
+    const moduleIds = modules.map((m) => m._id);
 
     // Fetch related chapters
-    const chapters = await Chapter.find({ moduleId: { $in: moduleIds } }).select('-__v -updatedAt');
-    const chapterIds = chapters.map(c => c._id);
+    const chapters = await Chapter.find({ moduleId: { $in: moduleIds } }).select(
+      "-__v -updatedAt"
+    );
+    const chapterIds = chapters.map((c) => c._id);
 
     // Fetch related lessons
-    const lessons = await Lesson.find({ chapterId: { $in: chapterIds } }).select('-__v -updatedAt');
+    const lessons = await Lesson.find({ chapterId: { $in: chapterIds } }).select(
+      "-__v -updatedAt"
+    );
 
     // Nest structure: modules → chapters → lessons
-    const structuredModules = modules.map(mod => ({
+    const structuredModules = modules.map((mod) => ({
       ...mod.toObject(),
       chapters: chapters
-        .filter(ch => ch.moduleId.equals(mod._id))
-        .map(ch => ({
+        .filter((ch) => ch.moduleId.equals(mod._id))
+        .map((ch) => ({
           ...ch.toObject(),
-          lessons: lessons.filter(ls => ls.chapterId.equals(ch._id))
-        }))
+          lessons: lessons.filter((ls) => ls.chapterId.equals(ch._id)),
+        })),
     }));
 
     const result = {
       ...course.toObject(),
-      modules: structuredModules
+      modules: structuredModules,
     };
 
-    res.status(200).json({ status: "success", data: result });
+    res.status(200).json({
+      status: "success",
+      totalModules,
+      page,
+      limit,
+      totalPages: Math.ceil(totalModules / limit),
+      data: result,
+    });
   } catch (err) {
     next(err);
   }
 };
+
 
 exports.getCoursesByAssignedTutor = catchAsync(async (req, res) => {
   const { tutorId } = req.params;
@@ -207,27 +231,45 @@ exports.getCoursesByAssignedTutor = catchAsync(async (req, res) => {
     throw new BadRequestError("Provided user is not a tutor");
   }
 
-  // 2. Fetch tutor document to get assigned course IDs
+  // Fetch tutor document to get assigned course IDs
   const tutor = await Tutor.findOne({ userId: tutorId }).lean();
-  if (!tutor) throw new NotFoundError("Tutor profile not found");
+  if (!tutor) throw new NotFoundError("Tutor not found");
 
   const courseIds = tutor.courseIds || [];
   if (courseIds.length === 0) {
     return res.status(200).json({
       status: "success",
       total: 0,
+      page: 1,
+      limit: 0,
+      totalPages: 0,
       data: [],
     });
   }
 
-  // 3. Fetch courses by IDs
+  //  Pagination
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  //  Count total
+  const total = await Course.countDocuments({ _id: { $in: courseIds } });
+
+  // Fetch courses with pagination + sorting
   const courses = await Course.find({ _id: { $in: courseIds } })
     .populate("createdBy", "name email _id")
-    .sort({ title: 1 }); // sort by title ascending, change as needed
+    .sort({ title: 1 }) 
+    .skip(skip)
+    .limit(limit);
 
+  // 6. Response
   res.status(200).json({
     status: "success",
-    total: courses.length,
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
     data: courses,
   });
 });
+
