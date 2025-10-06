@@ -200,13 +200,13 @@ exports.getChaptersByModuleId = catchAsync(async (req, res) => {
 
 exports.getChaptersByModuleIdForStudent = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
-  const { page = 0, limit = 10 } = req.query;
+  const { page = 1, limit = 10 } = req.query;
   const studentId = req.user.id;
 
   if (!moduleId) throw new BadRequestError("Module ID is required");
   if (!studentId) throw new BadRequestError("Student ID is required");
 
-  const skip = (parseInt(page) ) * parseInt(limit);
+  const skip = (parseInt(page) -1 ) * parseInt(limit);
 
   // Ensure module exists
   const module = await Module.findById(moduleId);
