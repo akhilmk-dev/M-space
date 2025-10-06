@@ -1,6 +1,9 @@
 const checkDependencies = require('../helper/checkDependencies');
 const Chapter = require('../models/Chapter');
+const Lesson = require('../models/Lesson');
+const LessonCompletion = require('../models/LessonCompletion');
 const Module = require('../models/Module');
+const Student = require('../models/Student');
 const catchAsync = require('../utils/catchAsync');
 
 const {
@@ -8,6 +11,7 @@ const {
   ConflictError,
   BadRequestError,
   EmptyRequestBodyError,
+  InternalServerError,
 } = require('../utils/customErrors');
 
 // Create Chapter
@@ -93,7 +97,6 @@ exports.getAllChapters = catchAsync(async (req, res) => {
     data: chapters,
   });
 });
-
 
 // Get Chapter by ID
 exports.getChapterById = catchAsync(async (req, res) => {
@@ -192,6 +195,78 @@ exports.getChaptersByModuleId = catchAsync(async (req, res) => {
   res.status(200).json({
     status: 'success',
     data: chapters,
+  });
+});
+
+exports.getChaptersByModuleIdForStudent = catchAsync(async (req, res) => {
+  const { moduleId } = req.params;
+  const { page = 0, limit = 10 } = req.query;
+  const studentId = req.user.id;
+
+  if (!moduleId) throw new BadRequestError("Module ID is required");
+  if (!studentId) throw new BadRequestError("Student ID is required");
+
+  const skip = (parseInt(page) ) * parseInt(limit);
+
+  // Ensure module exists
+  const module = await Module.findById(moduleId);
+  if (!module) throw new InternalServerError("Module not found");
+
+  // Ensure student is enrolled
+  const student = await Student.findOne({ userId: studentId, courseId:module.courseId})
+    .populate("userId", "status name email");
+  if (!student) throw new InternalServerError("Student not found or not enrolled in this course");
+  if (student.userId?.status === false) throw new InternalServerError("Student account is inactive");
+
+  // Fetch paginated chapters
+  const chapters = await Chapter.find({ moduleId })
+    .sort({ orderIndex: 1 })
+    .skip(skip)
+    .limit(parseInt(limit))
+    .lean(); 
+
+  const totalChapters = await Chapter.countDocuments({ moduleId });
+
+  // Get all lesson IDs for these chapters
+  const chapterIds = chapters.map(c => c._id);
+  const lessons = await Lesson.find({ chapterId: { $in: chapterIds } }).select('_id chapterId').lean();
+
+  // Map lessons to chapters
+  const chapterLessonMap = {};
+  lessons.forEach(l => {
+    const chapId = l.chapterId.toString();
+    if (!chapterLessonMap[chapId]) chapterLessonMap[chapId] = [];
+    chapterLessonMap[chapId].push(l._id.toString());
+  });
+
+  // Get all completed lessons by student
+  const completedLessons = await LessonCompletion.find({
+    studentId,
+    lessonId: { $in: lessons.map(l => l._id) },
+    isCompleted: true
+  }).select('lessonId').lean();
+
+  const completedLessonIds = new Set(completedLessons.map(lc => lc.lessonId.toString()));
+
+  // Build final chapter data with isCompleted
+  const chapterData = chapters.map(chapter => {
+    const lessonIds = chapterLessonMap[chapter._id.toString()] || [];
+    const totalLessons = lessonIds.length;
+    const completedCount = lessonIds.filter(id => completedLessonIds.has(id)).length;
+    return {
+      ...chapter,
+      totalLessons,
+      completedLessons: completedCount,
+      isCompleted: totalLessons > 0 && completedCount === totalLessons
+    };
+  });
+
+  res.status(200).json({
+    status: "success",
+    totalChapters,
+    currentPage: parseInt(page),
+    totalPages: Math.ceil(totalChapters / limit),
+    data: chapterData,
   });
 });
 

@@ -23,13 +23,13 @@ const createUser = async (req, res, next) => {
   try {
     const { name, email, phone, password, roleId } = req.body;
 
-    // 1. Check if user already exists
+    // Check if user already exists
     const existingUser = await User.findOne({ email }).session(session);
     if (existingUser) {
       throw new ConflictError("Email already in use.");
     }
 
-    // 2. Validate roleId
+    // Validate roleId
     if (!mongoose.Types.ObjectId.isValid(roleId)) {
       throw new BadRequestError("Invalid roleId format.");
     }
@@ -39,10 +39,10 @@ const createUser = async (req, res, next) => {
       throw new BadRequestError("Role not found.");
     }
 
-    // 3. Hash password
+    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // 4. Create user
+    // Create user
     const newUser = await User.create(
       [{
         name,

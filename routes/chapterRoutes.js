@@ -23,4 +23,6 @@ router.delete('/:chapterId',authenticate, chapterController.deleteChapter);
 // chapter by module
 router.get('/by-module/:moduleId',authenticate,chapterController.getChaptersByModuleId);
 
+router.get('/student/by-module/:moduleId',authenticate,chapterController.getChaptersByModuleIdForStudent)
+
 module.exports = router;

@@ -34,7 +34,7 @@ const processAssignmentFiles = async (files = [], existingFiles = []) => {
     const { base64, name } = file;
     if (!base64 || !name) continue;
 
-    // Case 1: Already uploaded file (URL passed inside base64)
+    // Already uploaded file (URL passed inside base64)
     if (base64.startsWith("http")) {
       const existingFile = existingFiles.find(f => f.fileUrl == base64);
       uploaded.push({
@@ -43,7 +43,7 @@ const processAssignmentFiles = async (files = [], existingFiles = []) => {
         size: existingFile ? existingFile.size : null,
       });
     }
-    // Case 2: New file (real base64, needs upload)
+    //  New file (real base64, needs upload)
     else {
       const fileUrl = await uploadBase64ToS3(base64, name, "assignments");
       const size = calculateBase64FileSize(base64);
@@ -55,7 +55,7 @@ const processAssignmentFiles = async (files = [], existingFiles = []) => {
   return uploaded;
 };
 
-// === Controller: Create Assignment
+//  Controller: Create Assignment
 const createAssignment = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -170,7 +170,7 @@ const getAssignmentById = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // 1. Get the assignment
+    //  Get the assignment
     const assignment = await Assignment.findById(id)
       .populate("createdBy", "name email")
       .populate("assignedTo", "name email");
@@ -182,7 +182,7 @@ const getAssignmentById = async (req, res, next) => {
       });
     }
 
-    // 2. Get submissions — ONLY populate lessonId
+    // Get submissions — ONLY populate lessonId
     const submissions = await AssignmentSubmission.find({ assignmentId: id })
       .populate({
         path: "lessonId",
@@ -206,18 +206,18 @@ const getAssignmentById = async (req, res, next) => {
       })
       .sort({ createdAt: -1 });
 
-    // 3. Extract courseId from first submission
+    // Extract courseId from first submission
     const firstSubmission = submissions[0];
     const courseId =
       firstSubmission?.lessonId?.chapterId?.moduleId?.courseId?._id || null;
 
-    // 4. Strip submissions to only keep lessonId and student name
+    // Strip submissions to only keep lessonId and student name
     const strippedSubmissions = submissions.map(sub => ({
       _id: sub._id,
       submittedAt: sub?.submittedAt || '',
       reviewedAt:sub?.reviewedAt || '',
       userId: sub.studentId?._id,
-      studentName: sub.studentId?.name || null, // <-- add student name
+      studentName: sub.studentId?.name || null, 
       assignmentId: sub.assignmentId,
       lessonId: sub.lessonId?._id,
       createdAt: sub.createdAt,
@@ -225,7 +225,7 @@ const getAssignmentById = async (req, res, next) => {
     }));
 
 
-    // 5. Return response
+    // Return response
     res.status(200).json({
       status: "success",
       assignment,

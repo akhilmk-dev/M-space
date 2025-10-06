@@ -367,7 +367,6 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
   });
 });
 
-
 // Delete Module
 exports.deleteModule = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
