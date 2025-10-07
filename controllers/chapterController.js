@@ -246,7 +246,7 @@ exports.getChaptersByModuleIdForStudent = catchAsync(async (req, res) => {
     isCompleted: true
   }).select('lessonId').lean();
 
-  const completedLessonIds = new Set(completedLessons.map(lc => lc.lessonId.toString()));
+ const completedLessonIds = new Set(completedLessons.map(lc => lc.lessonId.toString()));
 
   // Build final chapter data with isCompleted
   const chapterData = chapters.map(chapter => {
