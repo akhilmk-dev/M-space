@@ -8,6 +8,7 @@ const {
     BadRequestError,
     NotFoundError,
     ConflictError,
+    InternalServerError,
 } = require("../utils/customErrors");
 const checkDependencies = require("../helper/checkDependencies");
 
@@ -363,10 +364,67 @@ async function getTutorsByCourseId(req, res, next) {
     }
 }
 
+const changeTutorPassword = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const userId = req.user.id; 
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      throw new BadRequestError("Both old and new passwords are required");
+    }
+
+    // Fetch user
+    const user = await User.findById(userId).populate("roleId").session(session);
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    //Verify user is a tutor
+    const role = user?.roleId?.role_name?.toLowerCase();
+    if (role !== "tutor") {
+      throw new InternalServerError("Tutor not found");
+    }
+
+    // Verify old password
+    const isMatch = await bcrypt.compare(oldPassword, user.passwordHash);
+    if (!isMatch) {
+      throw new InternalServerError("Old password is incorrect");
+    }
+
+    // Check that old and new passwords are not the same
+    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw new InternalServerError("New password cannot be the same as the old password");
+    }
+
+    // Hash and update new password
+    const newHashedPassword = await bcrypt.hash(newPassword, 10);
+    user.passwordHash = newHashedPassword;
+    await user.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      status: "success",
+      message: "Password changed successfully",
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    next(err);
+  }
+};
+
+
 module.exports = {
     createTutor,
     listTutors,
     updateTutor,
     deleteTutor,
     getTutorsByCourseId,
+    changeTutorPassword
 };

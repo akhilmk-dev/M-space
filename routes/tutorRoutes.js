@@ -20,4 +20,7 @@ router.delete("/:tutorId",authenticate, tutorController.deleteTutor);
 // Get tutors by courseId
 router.get("/course/:courseId",authenticate, tutorController.getTutorsByCourseId);
 
+// change password for tutor
+router.post('/change-password',authenticate,tutorController.changeTutorPassword);
+
 module.exports = router;

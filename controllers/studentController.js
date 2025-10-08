@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Course = require('../models/Course');
 const Student = require('../models/Student');
-const { BadRequestError, NotFoundError, ConflictError } = require('../utils/customErrors'); // adjust your error classes
+const { BadRequestError, NotFoundError, ConflictError, UnAuthorizedError, InternalServerError } = require('../utils/customErrors'); // adjust your error classes
 const Roles = require('../models/Roles');
 const bcrypt = require("bcrypt");
 const checkDependencies = require('../helper/checkDependencies');
@@ -308,6 +308,61 @@ async function deleteStudent(req, res, next) {
   }
 }
 
+const changeStudentPassword = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const userId = req.user.id; 
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      throw new BadRequestError("Both old and new passwords are required");
+    }
+
+    // Fetch user
+    const user = await User.findById(userId).populate("roleId").session(session);
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    //Verify user is a student
+    const role = user?.roleId?.role_name?.toLowerCase();
+    if (role !== "student") {
+      throw new InternalServerError("You are not authorized to change password");
+    }
+
+    // Verify old password
+    const isMatch = await bcrypt.compare(oldPassword, user.passwordHash);
+    if (!isMatch) {
+      throw new InternalServerError("Old password is incorrect");
+    }
+
+    // Check that old and new passwords are not the same
+    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw new InternalServerError("New password cannot be the same as the old password");
+    }
+
+    // Hash and update new password
+    const newHashedPassword = await bcrypt.hash(newPassword, 10);
+    user.passwordHash = newHashedPassword;
+    await user.save({ session });
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(200).json({
+      status: "success",
+      message: "Password changed successfully",
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    next(err);
+  }
+};
+
 
 const getStudentsByCourseId = async (req, res, next) => {
   try {
@@ -471,11 +526,7 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
 
     //  Get course details
     const course = await Course.findById(studentInfo.courseId).lean();
-
-    //  Attendance percentage (dummy)
     const attendancePercentage = Math.floor(Math.random() * (100 - 60 + 1)) + 60; 
-    // random between 60–100
-
     // Fetch submissions (with filters + pagination)
     const filter = { studentId: studentInfo.userId }; // note: studentInfo._id (not userId)
     if (status) {
@@ -520,7 +571,6 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
   }
 };
 
-
 module.exports = {
   createStudent,
   listStudents,
@@ -528,5 +578,6 @@ module.exports = {
   deleteStudent,
   getStudentsByCourseId,
   listStudentsByTutor,
-  getStudentDetailsWithSubmissions
+  getStudentDetailsWithSubmissions,
+  changeStudentPassword
 };

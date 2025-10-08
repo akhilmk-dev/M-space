@@ -218,7 +218,6 @@ exports.geFullCourseById = async (req, res, next) => {
   }
 };
 
-
 exports.getCoursesByAssignedTutor = catchAsync(async (req, res) => {
   const { tutorId } = req.params;
 
@@ -250,13 +249,19 @@ exports.getCoursesByAssignedTutor = catchAsync(async (req, res) => {
   //  Pagination
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
+  const search = req.query.search || ''
   const skip = (page - 1) * limit;
 
+  const filter = { _id: { $in: courseIds } };
+  if (search) {
+    filter.title = { $regex: search, $options: "i" }; 
+  }
+
   //  Count total
-  const total = await Course.countDocuments({ _id: { $in: courseIds } });
+  const total = await Course.countDocuments(filter);
 
   // Fetch courses with pagination + sorting
-  const courses = await Course.find({ _id: { $in: courseIds } })
+  const courses = await Course.find(filter)
     .populate("createdBy", "name email _id")
     .sort({ title: 1 }) 
     .skip(skip)

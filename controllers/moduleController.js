@@ -241,7 +241,7 @@ const formatDuration = (minutes) => {
 
 exports.getModulesByCourseId = catchAsync(async (req, res) => {
   const { courseId } = req.params;
-  const { status, page = 1, limit = 10 } = req.query; 
+  const { status, page = 1, limit = 10 ,search} = req.query; 
   const studentId = req.user.id;
   
   if (!courseId) {
@@ -257,12 +257,18 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
   const pageNum = Math.max(1, parseInt(page));
   const limitNum = Math.max(1, parseInt(limit));
   const skip = (pageNum - 1) * limitNum;
+  const filter = { courseId };
+  if (search) {
+    filter.$or = [
+      { title: { $regex: search, $options: "i" } }
+    ];
+  }
 
   // Count total modules for pagination metadata
-  const totalModules = await Module.countDocuments({ courseId });
+  const totalModules = await Module.countDocuments(filter);
 
   // Fetch modules with pagination
-  let modules = await Module.find({ courseId })
+  let modules = await Module.find(filter)
     .sort({ orderIndex: 1 })
     .skip(skip)
     .limit(limitNum)

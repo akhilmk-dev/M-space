@@ -3,7 +3,6 @@ const catchAsync = require('../utils/catchAsync');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const LessonCompletion = require('../models/LessonCompletion');
 
-
 exports.getImageUrl = catchAsync(async (req, res) => {
     const s3 = new S3Client({
       region: process.env.AWS_REGION,
