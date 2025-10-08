@@ -7,7 +7,7 @@ const LessonSchema = new mongoose.Schema({
   orderIndex: { type: Number, required: [true,"Order is required"] },
   contentType: { type: String, required: [true,"Content type is required"] },
   contentURL: { type: String, required: [true,"Content Url is required"] },
-  duration: { type: Number} // in seconds
+  duration: { type: Number} 
 },{timestamps:true});
 
 module.exports = mongoose.model('Lesson', LessonSchema);

@@ -318,6 +318,67 @@ exports.getLessonsByChapterIdForStudent = async (req, res, next) => {
   }
 };
 
+exports.getAllLessons = async (req, res, next) => {
+  try {
+    const {
+      courseId,
+      moduleId,
+      chapterId,
+      search = "",
+      sortBy = "orderIndex",
+      sortOrder = "asc",
+      page = 1,
+      limit = 10
+    } = req.query;
+
+    const filter = {};
+
+    // Filters
+    if (courseId) filter.courseId = courseId;
+    if (moduleId) filter.moduleId = moduleId;
+    if (chapterId) filter.chapterId = chapterId;
+    if (search) filter.title = { $regex: search, $options: "i" };
+
+    // Pagination setup
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.max(1, parseInt(limit));
+    const skip = (pageNum - 1) * limitNum;
+
+    // Sorting setup
+    const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
+
+    const lessons = await Lesson.find(filter)
+      .populate({
+        path: "chapterId",
+        select: "title moduleId",
+        populate: {
+          path: "moduleId",
+          select: "title courseId",
+          populate: { path: "courseId", select: "title" },
+        },
+      })
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    const total = await Lesson.countDocuments(filter);
+
+    res.status(200).json({
+      success: true,
+      total,
+      currentPage: pageNum,
+      totalPages: Math.ceil(total / limitNum),
+      data: lessons,
+    });
+  } catch (err) {
+    console.error("Error fetching all lessons:", err);
+    next(err);
+  }
+};
+
+
+
 // exports.updateLessons = async (req, res, next) => {
 //   try {
 //     const { courseId, moduleId, chapterId } = req.params;
