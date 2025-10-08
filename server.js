@@ -29,7 +29,7 @@ connectDB();
 
 const app = express();
 
-app.use(cors({origin: ["http://localhost:3000"], 
+app.use(cors({origin: ["http://localhost:3000","https://lucent-tapioca-4ef19f.netlify.app/"], 
     credentials: true, }));
 // Increase limit to 50mb or more, as needed
 app.use(express.json({ limit: '50mb' }));

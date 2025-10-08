@@ -7,6 +7,7 @@ const tutorSchema = new mongoose.Schema(
       ref: 'User', 
       required: true 
     },
+    profile_image:{type: String},
     courseIds: {
       type: [
         {

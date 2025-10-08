@@ -6,11 +6,11 @@ const StudentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Course", 
   },
+  profile_image:{type: String},
   enrollmentDate: {
     type: Date,
     default: Date.now,
   },
 });
-
 
 module.exports =  mongoose.model("Student", StudentSchema);
