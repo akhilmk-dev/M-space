@@ -13,22 +13,54 @@ const Chapter = require('../models/Chapter');
 const User = require('../models/User');
 const checkDependencies = require('../helper/checkDependencies');
 const ModuleCompletion = require('../models/ModuleCompletion');
+const { uploadBase64ToS3 } = require('../utils/s3Uploader');
 
-//  Create Module
+// Create Module
 exports.createModule = catchAsync(async (req, res) => {
-  const { title, orderIndex, courseId } = req.body;
-  
-  const course = await Course.findById(courseId);
-  if (!course) throw new NotFoundError("course does not exist");
+  const { title, orderIndex, courseId, thumbnail } = req.body;
 
+  if (!title || !courseId) {
+    throw new BadRequestError("Title and Course ID are required");
+  }
+
+  // Validate course existence
+  const course = await Course.findById(courseId);
+  if (!course) throw new NotFoundError("Course does not exist");
+
+  // Check duplicate title in same course
   const duplicate = await Module.findOne({ courseId, title });
   if (duplicate) {
     throw new ConflictError("A module with the same title already exists");
   }
-  const module = await Module.create({ courseId, title, orderIndex });
+
+  // Upload thumbnail if provided
+  let thumbnailUrl = null;
+  if (thumbnail) {
+    try {
+      thumbnailUrl = await uploadBase64ToS3(thumbnail, "module-thumbnails");
+    } catch (err) {
+      throw new BadRequestError("Error uploading thumbnail to S3: " + err.message);
+    }
+  }
+
+  // Create new module
+  const module = await Module.create({
+    courseId,
+    title,
+    orderIndex,
+    thumbnail: thumbnailUrl,
+  });
+
+  //  Response
   res.status(201).json({
-    status: 'success',
-    data: {courseId:course,title:module?.title,orderIndex:module?.orderIndex,_id:module._id},
+    status: "success",
+    data: {
+      _id: module._id,
+      courseId: course,
+      title: module.title,
+      orderIndex: module.orderIndex,
+      thumbnail: module.thumbnail,
+    },
   });
 });
 
@@ -165,44 +197,71 @@ exports.getModuleById = catchAsync(async (req, res) => {
 exports.updateModule = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
   const updates = req.body;
-
-  if (!Object.keys(updates).length) {
-    throw new EmptyRequestBodyError();
-  }
-
+  // Find module
   const module = await Module.findById(moduleId);
-  if (!module) throw new NotFoundError('Module not found');
-  let course= null;
+  if (!module) throw new NotFoundError("Module not found");
+
+  let course = null;
+
+  // If courseId is provided, validate
   if (updates.courseId) {
     const courseExists = await Course.findById(updates.courseId);
+    if (!courseExists) throw new NotFoundError("Course does not exist");
     course = courseExists;
-    if (!courseExists) throw new NotFoundError('course does not exist');
   }
 
+  // Check for duplicate title within same course
   if (updates.title) {
     const duplicate = await Module.findOne({
       _id: { $ne: moduleId },
-      courseId: course,
+      courseId: updates.courseId || module.courseId,
       title: updates.title,
     });
-
     if (duplicate) {
       throw new ConflictError("Another module with this title exists in the course.");
     }
   }
 
+  // Handle thumbnail update
+  if (updates.thumbnail) {
+    const thumb = updates.thumbnail;
+
+    // If thumbnail is base64 (not an S3 URL)
+    if (thumb.startsWith("data:")) {
+      try {
+        const thumbnailUrl = await uploadBase64ToS3(thumb, "module-thumbnails");
+        updates.thumbnail = thumbnailUrl;
+      } catch (err) {
+        throw new BadRequestError("Error uploading thumbnail to S3: " + err.message);
+      }
+    } else if (thumb === null || thumb.trim() === "") {
+      // If explicitly null or empty string → remove it
+      delete updates.thumbnail;
+    } else if (thumb.startsWith("http")) {
+      // If already an S3 URL → don’t change it
+      delete updates.thumbnail;
+    }
+  }
+
+  // Apply updates
   Object.assign(module, updates);
   await module.save();
 
-  res.status(200).json({ status: 'success',message:"Module updated successully", data: {
-    _id:module?._id,
-    title:module?.title,
-    courseId:{
-      _id:course?._id,
-      title:course?.title
+  // Response
+  res.status(200).json({
+    status: "success",
+    message: "Module updated successfully",
+    data: {
+      _id: module._id,
+      title: module.title,
+      orderIndex: module.orderIndex,
+      courseId: {
+        _id: course?._id || module.courseId,
+        title: course?.title,
+      },
+      thumbnail: module.thumbnail,
     },
-    orderIndex:module?.orderIndex
-  } });
+  });
 });
 
 // Get Modules by Course ID

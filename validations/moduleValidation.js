@@ -20,6 +20,11 @@ const moduleValidationSchema = Joi.object({
     "any.required": "Title is required",
   }),
 
+  thumbnail: Joi.string().trim().required().messages({
+    "string.empty": "Thumbnail is required",
+    "any.required": "Thumbnail is required",
+  }),
+
   orderIndex: Joi.number().integer().required().messages({
     "number.base": "Order must be a number",
     "any.required": "Order is required",

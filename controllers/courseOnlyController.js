@@ -17,20 +17,67 @@ const {
   InternalServerError,
   ForbiddenError,
 } = require('../utils/customErrors');
+const { uploadBase64ToS3 } = require('../utils/s3Uploader');
 
 // Create Course
 exports.createCourse = catchAsync(async (req, res) => {
-  const { title, description, status } = req.body;
-  const user = await User.findById(req.user.id).populate('roleId');
+  const { title, description, status, thumbnail } = req.body;
+
+  // Validate required fields
+  if (!title || !thumbnail) {
+    throw new BadRequestError("Title and thumbnail are required");
+  }
+
+  // Validate user role
+  const user = await User.findById(req.user.id).populate("roleId");
   const role = user?.roleId?.role_name?.toLowerCase();
-  if( role == "student" || role == "tutor")throw new ForbiddenError("user doesn't have permission to create course")
-  const existingCourse = await Course.findOne({ title: { $regex: new RegExp(`^${title}$`, "i") } });
+  if (role === "student" || role === "tutor") {
+    throw new ForbiddenError("User doesn't have permission to create a course");
+  }
+
+  // Check for duplicate title (case-insensitive)
+  const existingCourse = await Course.findOne({
+    title: { $regex: new RegExp(`^${title}$`, "i") },
+  });
   if (existingCourse) {
     throw new ConflictError("A course with this title already exists.");
   }
-  const course = await Course.create({ title, description, createdBy:req.user.id, status });
-  res.status(201).json({ status: 'success', data: course });
+
+  // Upload thumbnail
+  let thumbnailUrl = null;
+  try {
+    thumbnailUrl = await uploadBase64ToS3(thumbnail, "course-thumbnails");
+  } catch (err) {
+    throw new BadRequestError("Error uploading thumbnail to S3: " + err.message);
+  }
+
+  // Create course
+  const course = await Course.create({
+    title,
+    description,
+    status,
+    thumbnail: thumbnailUrl,
+    createdBy: req.user.id,
+  });
+
+  // Response (matching createModule style)
+  res.status(201).json({
+    status: "success",
+    data: {
+      _id: course._id,
+      title: course.title,
+      description: course.description,
+      status: course.status,
+      thumbnail: course.thumbnail,
+      createdBy: {
+        _id: user._id,
+        name: user.name,
+        role: user?.roleId?.role_name,
+      },
+    },
+  });
 });
+
 
 // Get All Courses
 exports.getAllCourses = catchAsync(async (req, res) => {
@@ -91,20 +138,73 @@ exports.getCourseById = catchAsync(async (req, res) => {
 exports.updateCourse = catchAsync(async (req, res) => {
   const { courseId } = req.params;
   const updates = req.body;
-  const course = await Course.findById(courseId);
-  if (!course) throw new NotFoundError('Course not found');
-  const user = await User.findById(req.user.id).populate('roleId');
-  const role = user?.roleId?.role_name?.toLowerCase();
-  if( role == "student" || role == "tutor")throw new ForbiddenError("user doesn't have permission to update course")
 
-  if (updates.title) {
-    const titleConflict = await Course.findOne({ title: { $regex: new RegExp(`^${updates.title}$`, "i") }, _id: { $ne: courseId } });
-    if (titleConflict) throw new ConflictError('Another course with this title already exists');
+  // Find course
+  const course = await Course.findById(courseId);
+  if (!course) throw new NotFoundError("Course not found");
+
+  // Role validation
+  const user = await User.findById(req.user.id).populate("roleId");
+  const role = user?.roleId?.role_name?.toLowerCase();
+  if (role === "student" || role === "tutor") {
+    throw new ForbiddenError("User doesn't have permission to update course");
   }
+
+  // Check for duplicate title
+  if (updates.title) {
+    const duplicate = await Course.findOne({
+      _id: { $ne: courseId },
+      title: { $regex: new RegExp(`^${updates.title}$`, "i") },
+    });
+    if (duplicate) {
+      throw new ConflictError("Another course with this title already exists");
+    }
+  }
+
+  // Handle thumbnail update
+  if (updates.thumbnail) {
+    const thumb = updates.thumbnail;
+
+    if (thumb.startsWith("data:")) {
+      // Upload new thumbnail if base64
+      try {
+        const thumbnailUrl = await uploadBase64ToS3(thumb, "course-thumbnails");
+        updates.thumbnail = thumbnailUrl;
+      } catch (err) {
+        throw new BadRequestError("Error uploading thumbnail to S3: " + err.message);
+      }
+    } else if (thumb === null || thumb.trim() === "") {
+      // Explicitly null or empty string → ignore updating
+      delete updates.thumbnail;
+    } else if (thumb.startsWith("http")) {
+      // Already an S3 URL → ignore updating
+      delete updates.thumbnail;
+    }
+  }
+
+  // Apply updates
   Object.assign(course, updates);
   await course.save();
-  res.status(200).json({ status: 'success', data: course });
+
+  // Response
+  res.status(200).json({
+    status: "success",
+    message: "Course updated successfully",
+    data: {
+      _id: course._id,
+      title: course.title,
+      description: course.description,
+      status: course.status,
+      thumbnail: course.thumbnail,
+      createdBy: {
+        _id: user._id,
+        name: user.name,
+        role: user?.roleId?.role_name,
+      },
+    },
+  });
 });
+
 
 // Delete Course
 exports.deleteCourse = async (req, res, next) => {

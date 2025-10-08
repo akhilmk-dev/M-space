@@ -12,7 +12,10 @@ const courseValidation = Joi.object({
       "string.max": "Title cannot exceed 100 characters"
     }),
   description: Joi.string(),
-  status: Joi.boolean().default(true)
+  status: Joi.boolean().default(true),
+  thumbnail:Joi.string().required().messages({
+      "string.empty": "Thumbnail is required",
+    })
 });
 
 module.exports = courseValidation;
