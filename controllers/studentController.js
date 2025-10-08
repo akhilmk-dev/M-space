@@ -10,7 +10,7 @@ const Tutor = require('../models/Tutor');
 const AssignmentSubmission = require('../models/AssignmentSubmission');
 
 // Create only student (you already have)
-async function createStudent(req, res, next) {
+const createStudent = async(req, res, next)=> {
   const session = await mongoose.startSession();
   session.startTransaction();
 
