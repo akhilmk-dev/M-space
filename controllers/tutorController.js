@@ -13,6 +13,7 @@ const {
 } = require("../utils/customErrors");
 const checkDependencies = require("../helper/checkDependencies");
 const { uploadBase64ToS3 } = require("../utils/s3Uploader");
+const hasPermission = require("../helper/hasPermission");
 
 // Create tutor
 async function createTutor(req, res, next) {
@@ -20,7 +21,11 @@ async function createTutor(req, res, next) {
   session.startTransaction();
 
   try {
-    const { name, email, phone, password, courseIds, profile_image } = req.body;
+    const isPermission = await hasPermission(req.user?.id, "Add Tutor");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to create tutor")
+    }
+    const { name, email, phone, password, courseIds, profile_image,status=true } = req.body;
 
     if (!name || !email || !phone || !password || !courseIds || !courseIds.length) {
       throw new BadRequestError("All fields are required, including at least one courseId.");
@@ -94,6 +99,7 @@ async function createTutor(req, res, next) {
           userId: user._id,
           courseIds,
           profile_image: profileImageUrl,
+          status:status
         },
       ],
       { session }
@@ -121,6 +127,7 @@ async function createTutor(req, res, next) {
         phone: user.phone,
         profileImage: profileImageUrl,
         courses,
+        status:status
       },
     });
   } catch (err) {
@@ -130,20 +137,23 @@ async function createTutor(req, res, next) {
   }
 }
 
-
 // List tutors with pagination & search
 async function listTutors(req, res, next) {
     try {
-      // 1. Pagination
+      const isPermission = await hasPermission(req.user?.id, "List Tutor");
+      if (!isPermission ) {
+        throw new ForbiddenError("User Doesn't have permission to list tutor")
+      }
+      // Pagination
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
       const skip = (page - 1) * limit;
   
-      // 2. Search
+      // Search
       const search = req.query.search || '';
       const searchRegex = new RegExp(search, 'i');
   
-      // 3. Sort (field:direction)
+      // Sort (field:direction)
       let sortField = 'createdAt';
       let sortOrder = -1; // default: descending
   
@@ -153,13 +163,13 @@ async function listTutors(req, res, next) {
         sortOrder = order === 'asc' ? 1 : -1;
       }
   
-      // 4. Tutor role
+      // Tutor role
       const tutorRole = await Roles.findOne({ role_name: /tutor/i });
       if (!tutorRole) {
         throw new NotFoundError('Tutor role not found.');
       }
   
-      // 5. Match query
+      // Match query
       const match = {
         roleId: tutorRole._id,
         $or: [
@@ -169,10 +179,10 @@ async function listTutors(req, res, next) {
         ],
       };
   
-      // 6. Count
+      // Count
       const total = await User.countDocuments(match);
   
-      // 7. Fetch
+      // Fetch
       const users = await User.find(match)
         .populate('roleId', 'role_name')
         .sort({ [sortField]: sortOrder })
@@ -181,7 +191,7 @@ async function listTutors(req, res, next) {
         .limit(limit)
         .lean();
   
-      // 8. Enrich tutors
+      // Enrich tutors
       const tutors = await Promise.all(
         users.map(async (u) => {
           const tutorInfo = await Tutor.findOne({ userId: u._id }).lean();
@@ -196,11 +206,12 @@ async function listTutors(req, res, next) {
             phone: u.phone,
             role: u.roleId.role_name,
             courses: courses.map((c) => ({ id: c._id, title: c.title })),
+            profile_image: tutorInfo?.profile_image || null
           };
         })
       );
   
-      // 9. Response
+      // Response
       res.json({
         status: 'success',
         page,
@@ -220,6 +231,10 @@ async function updateTutor(req, res, next) {
   session.startTransaction();
 
   try {
+    const isPermission = await hasPermission(req.user?.id, "Edit Tutor");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to edit tutor")
+    }
     const { tutorId } = req.params;
     const { name, email, phone, courseIds, profile_image } = req.body;
 
@@ -326,13 +341,16 @@ async function updateTutor(req, res, next) {
   }
 }
 
-
 // Delete tutor
 async function deleteTutor(req, res, next) {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
+    const isPermission = await hasPermission(req.user?.id, "Delete Tutor");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to delete tutor")
+    }
     const { tutorId } = req.params;
 
     if (!mongoose.Types.ObjectId.isValid(tutorId)) {
@@ -573,7 +591,6 @@ const updateTutorProfile = async(req, res, next) =>{
     next(err);
   }
 }
-
 
 
 module.exports = {

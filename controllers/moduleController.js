@@ -6,6 +6,7 @@ const {
   ConflictError,
   BadRequestError,
   EmptyRequestBodyError,
+  ForbiddenError,
 } = require('../utils/customErrors');
 const Lesson = require('../models/Lesson');
 const LessonCompletion = require('../models/LessonCompletion');
@@ -14,11 +15,15 @@ const User = require('../models/User');
 const checkDependencies = require('../helper/checkDependencies');
 const ModuleCompletion = require('../models/ModuleCompletion');
 const { uploadBase64ToS3 } = require('../utils/s3Uploader');
+const hasPermission = require('../helper/hasPermission');
 
 // Create Module
 exports.createModule = catchAsync(async (req, res) => {
   const { title, orderIndex, courseId, thumbnail } = req.body;
-
+  const isPermission = await hasPermission(req.user?.id, "Add Module");
+  if (!isPermission ) {
+    throw new ForbiddenError("User Doesn't have permission to create module")
+  }
   if (!title || !courseId) {
     throw new BadRequestError("Title and Course ID are required");
   }
@@ -66,6 +71,10 @@ exports.createModule = catchAsync(async (req, res) => {
 
 // Get All Modules
 exports.getAllModules = catchAsync(async (req, res) => {
+  const isPermission = await hasPermission(req.user?.id, "List Module");
+  if (!isPermission ) {
+    throw new ForbiddenError("User Doesn't have permission to list module")
+  }
   // Pagination
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -197,6 +206,10 @@ exports.getModuleById = catchAsync(async (req, res) => {
 exports.updateModule = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
   const updates = req.body;
+  const isPermission = await hasPermission(req.user?.id, "Edit Module");
+  if (!isPermission ) {
+    throw new ForbiddenError("User Doesn't have permission to edit module")
+  }
   // Find module
   const module = await Module.findById(moduleId);
   if (!module) throw new NotFoundError("Module not found");
@@ -434,6 +447,10 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
 
 // Delete Module
 exports.deleteModule = catchAsync(async (req, res) => {
+  const isPermission = await hasPermission(req.user?.id, "Delete Module");
+  if (!isPermission ) {
+    throw new ForbiddenError("User Doesn't have permission to delete module")
+  }
   const { moduleId } = req.params;
   const module = await Module.findById(moduleId);
   if (!module) throw new NotFoundError('Module not found');

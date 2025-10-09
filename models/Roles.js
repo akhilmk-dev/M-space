@@ -5,11 +5,13 @@ const RoleSchema = new mongoose.Schema({
     type: String,
     required: [true,"role name is required"]
   },
-  permissions: {
-    type: [String],
-    default: [],
-    required: true
-  }
+  permissions: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Permission', 
+      required: true,
+    },
+  ],
 },{timestamps:true});
 
 module.exports = mongoose.model('Role', RoleSchema);

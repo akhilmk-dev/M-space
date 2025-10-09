@@ -18,17 +18,13 @@ const createRole = async (req, res, next) => {
       error.isJoi = true;
       throw error;
     }
-
     const {  role_name, permissions } = value;
-
     const existingRoleName = await Role.findOne({ role_name: { $regex: `^${role_name}$`, $options: 'i' } });
     if (existingRoleName) {
       throw new ConflictError("Role name already exists.");
     }
-
     const newRole = new Role({ role_name, permissions });
     await newRole.save();
-
     res.status(201).json({ message: "Role created successfully.", data: newRole });
   } catch (err) {
     next(err);

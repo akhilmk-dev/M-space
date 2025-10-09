@@ -18,11 +18,15 @@ const {
   ForbiddenError,
 } = require('../utils/customErrors');
 const { uploadBase64ToS3 } = require('../utils/s3Uploader');
+const hasPermission = require('../helper/hasPermission');
 
 // Create Course
 exports.createCourse = catchAsync(async (req, res) => {
   const { title, description, status, thumbnail } = req.body;
-
+  const isPermission = await hasPermission(req.user?.id, "Add Course");
+  if (!isPermission ) {
+    throw new ForbiddenError("User Doesn't have permission to Create Course")
+  }
   // Validate required fields
   if (!title || !thumbnail) {
     throw new BadRequestError("Title and thumbnail are required");
@@ -80,6 +84,10 @@ exports.createCourse = catchAsync(async (req, res) => {
 
 // Get All Courses
 exports.getAllCourses = catchAsync(async (req, res) => {
+  const isPermission = await hasPermission(req.user?.id, "List Course");
+  if (!isPermission ) {
+    throw new ForbiddenError("User Doesn't have permission to list course")
+  }
   // 1. Pagination
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
@@ -137,7 +145,10 @@ exports.getCourseById = catchAsync(async (req, res) => {
 exports.updateCourse = catchAsync(async (req, res) => {
   const { courseId } = req.params;
   const updates = req.body;
-
+  const isPermission = await hasPermission(req.user?.id, "Edit Course");
+  if (!isPermission ) {
+    throw new ForbiddenError("User Doesn't have permission to edit course")
+  }
   // Find course
   const course = await Course.findById(courseId);
   if (!course) throw new NotFoundError("Course not found");
@@ -208,7 +219,10 @@ exports.updateCourse = catchAsync(async (req, res) => {
 exports.deleteCourse = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-
+  const isPermission = await hasPermission(req.user?.id, "Delete Course");
+  if (!isPermission ) {
+    throw new ForbiddenError("User Doesn't have permission to delete course")
+  }
   try {
     const user = await User.findById(req.user.id).populate("roleId").session(session);
     const role = user?.roleId?.role_name?.toLowerCase();
@@ -350,7 +364,11 @@ exports.getCoursesByAssignedTutor = catchAsync(async (req, res) => {
   const search = req.query.search || ''
   const skip = (page - 1) * limit;
 
-  const filter = { _id: { $in: courseIds } };
+  const filter = { 
+    _id: { $in: courseIds },
+    status: true, 
+  };
+
   if (search) {
     filter.title = { $regex: search, $options: "i" }; 
   }

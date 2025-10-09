@@ -8,6 +8,10 @@ const tutorSchema = new mongoose.Schema(
       required: true 
     },
     profile_image:{type: String},
+    status:{
+      type:Boolean,
+      default: true
+    },
     courseIds: {
       type: [
         {

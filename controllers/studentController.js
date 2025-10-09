@@ -9,6 +9,7 @@ const checkDependencies = require('../helper/checkDependencies');
 const Tutor = require('../models/Tutor');
 const AssignmentSubmission = require('../models/AssignmentSubmission');
 const { uploadBase64ToS3 } = require('../utils/s3Uploader');
+const hasPermission = require('../helper/hasPermission');
 
 // Create only student (you already have)
 const createStudent = async(req, res, next)=> {
@@ -16,7 +17,11 @@ const createStudent = async(req, res, next)=> {
   session.startTransaction();
 
   try {
-    const { name, email, phone, password, courseId, profile_image } = req.body;
+    const isPermission = await hasPermission(req.user?.id, "Add Student");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to create student")
+    }
+    const { name, email, phone, password, courseId, profile_image, status } = req.body;
     if (!name || !email || !phone || !password || !courseId) {
       throw new BadRequestError("All fields are required");
     }
@@ -76,10 +81,10 @@ const createStudent = async(req, res, next)=> {
         courseId,
         enrollmentDate: new Date(),
         profile_image: profileImageUrl,
+        status: status 
       }],
       { session }
     );
-    console.log(student,"student")
 
     await session.commitTransaction();
     session.endSession();
@@ -108,16 +113,20 @@ const createStudent = async(req, res, next)=> {
 // List students with pagination & search
 async function listStudents(req, res, next) {
   try {
-    // 1. Pagination
+    const isPermission = await hasPermission(req.user?.id, "List Student");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to list student")
+    }
+    // Pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    // 2. Search
+    //  Search
     const search = req.query.search || '';
     const searchRegex = new RegExp(search, 'i');
 
-    // 3. Sort (field:direction)
+    // Sort (field:direction)
     let sortField = 'createdAt';
     let sortOrder = -1; // default: descending
 
@@ -127,13 +136,13 @@ async function listStudents(req, res, next) {
       sortOrder = order === 'asc' ? 1 : -1;
     }
 
-    // 4. Student role
+    // Student role
     const studentRole = await Roles.findOne({ role_name: /student/i });
     if (!studentRole) {
       throw new NotFoundError('Student role not found.');
     }
 
-    // 5. Match condition
+    //  Match condition
     const match = {
       roleId: studentRole._id,
       $or: [
@@ -143,14 +152,14 @@ async function listStudents(req, res, next) {
       ]
     };
 
-    // 6. Count
+    // Count
     const total = await User.countDocuments(match);
 
-    // 7. Fetch users with sort + pagination
+    // Fetch users with sort + pagination
     const users = await User.find(match)
       .populate('roleId', 'role_name')
       .sort({ [sortField]: sortOrder })
-      .collation({ locale: "en", strength: 2 }) // <-- case-insensitive sort
+      .collation({ locale: "en", strength: 2 }) 
       .skip(skip)
       .limit(limit)
       .lean();
@@ -170,6 +179,7 @@ async function listStudents(req, res, next) {
         role: u.roleId.role_name,
         course: course ? { id: course._id, title: course.title } : null,
         enrollmentDate: studentInfo ? studentInfo.enrollmentDate : null,
+        profile_image: studentInfo?.profile_image || null
       };
     }));
 
@@ -193,8 +203,12 @@ async function updateStudent(req, res, next) {
   session.startTransaction();
 
   try {
+    const isPermission = await hasPermission(req.user?.id, "Edit Student");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to edit student")
+    }
     const { studentId } = req.params; // ID of student user
-    const { name, email, phone, courseId, profile_image } = req.body;
+    const { name, email, phone, courseId, profile_image,status=true } = req.body;
 
     // Validate student ID
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
@@ -264,6 +278,7 @@ async function updateStudent(req, res, next) {
       }
 
       if (courseId) studentInfo.courseId = courseId;
+      studentInfo.status = status;
       await studentInfo.save({ session });
     }
 
@@ -279,6 +294,7 @@ async function updateStudent(req, res, next) {
         phone: user.phone,
         profileImage: studentInfo.profile_image,
         course: course ? { id: course._id, title: course.title } : undefined,
+        status:status
       }
     });
 
@@ -293,10 +309,13 @@ async function updateStudent(req, res, next) {
 async function deleteStudent(req, res, next) {
   const session = await mongoose.startSession();
   session.startTransaction();
-
+  
   try {
+    const isPermission = await hasPermission(req.user?.id, "Delete Student");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to delete student")
+    }
     const { studentId } = req.params;
-
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
       throw new BadRequestError("Invalid student ID");
     }
@@ -689,7 +708,6 @@ const  updateStudentProfile = async(req, res, next)=> {
     next(err);
   }
 }
-
 
 module.exports = {
   createStudent,

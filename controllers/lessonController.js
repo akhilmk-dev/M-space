@@ -9,10 +9,14 @@ const User = require('../models/User');
 const Student = require('../models/Student');
 const Tutor = require('../models/Tutor');
 const LessonCompletion = require('../models/LessonCompletion');
+const hasPermission = require('../helper/hasPermission');
 
 exports.createLessons = async (req, res) => {
   try {
-
+    const isPermission = await hasPermission(req.user?.id, "Add Lesson");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to create lesson")
+    }
     const { courseId, moduleId, chapterId, lessons } = req.body;
 
     // Check if Course exists
@@ -56,7 +60,12 @@ exports.createLessons = async (req, res) => {
 };
 
 exports.updateSingleLesson = async (req, res, next) => {
+
   try {
+    const isPermission = await hasPermission(req.user?.id, "Edit Lesson");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to edit lesson")
+    }
     const { lessonId } = req.params
     const user = await User.findById(req.user.id).populate('roleId');
     if (user?.roleId?.role_name == "Student") {
@@ -93,7 +102,10 @@ exports.updateSingleLesson = async (req, res, next) => {
 exports.deleteLesson = async (req, res, next) => {
   try {
     const { lessonId } = req.params;
-
+    const isPermission = await hasPermission(req.user?.id, "Delete Lesson");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to delete lesson")
+    }
     if (!mongoose.Types.ObjectId.isValid(lessonId)) {
       throw new NotFoundError('Invalid lesson ID');
     }
@@ -103,7 +115,7 @@ exports.deleteLesson = async (req, res, next) => {
       throw new NotFoundError('Lesson not found');
     }
 
-    // 🔥 Remove references from other collections
+    //  Remove references from other collections
     await removeReferencesGlobally(lessonId);
 
     res.status(200).json({
@@ -320,11 +332,13 @@ exports.getLessonsByChapterIdForStudent = async (req, res, next) => {
 
 exports.getAllLessons = async (req, res, next) => {
   try {
+    const isPermission = await hasPermission(req.user?.id, "List Lesson");
+    if (!isPermission ) {
+      throw new ForbiddenError("User Doesn't have permission to list lesson")
+    }
     const {
       chapterId,
       search = "",
-      sortBy = "orderIndex",
-      sortOrder = "asc",
       page = 1,
       limit = 10
     } = req.query;
@@ -341,7 +355,11 @@ exports.getAllLessons = async (req, res, next) => {
     const skip = (pageNum - 1) * limitNum;
 
     // Sorting setup
-    const sort = { [sortBy]: sortOrder === "desc" ? -1 : 1 };
+    if (req.query.sortBy) {
+      const [field, order] = req.query.sortBy.split(':');
+      sortField = field || 'createdAt';
+      sortOrder = order === 'asc' ? 1 : -1;
+    }
 
     const lessons = await Lesson.find(filter)
       .populate({
@@ -353,7 +371,7 @@ exports.getAllLessons = async (req, res, next) => {
           populate: { path: "courseId", select: "title" },
         },
       })
-      .sort(sort)
+      .sort({ [sortField]: sortOrder })
       .skip(skip)
       .limit(limitNum)
       .lean();

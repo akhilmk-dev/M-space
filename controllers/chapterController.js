@@ -1,4 +1,5 @@
 const checkDependencies = require('../helper/checkDependencies');
+const hasPermission = require('../helper/hasPermission');
 const Chapter = require('../models/Chapter');
 const Lesson = require('../models/Lesson');
 const LessonCompletion = require('../models/LessonCompletion');
@@ -12,12 +13,16 @@ const {
   BadRequestError,
   EmptyRequestBodyError,
   InternalServerError,
+  ForbiddenError,
 } = require('../utils/customErrors');
 
 // Create Chapter
 exports.createChapter = catchAsync(async (req, res) => {
   const { moduleId, title, orderIndex } = req.body;
-
+  const isPermission = await hasPermission(req.user?.id, "Add Chapter");
+  if (!isPermission ) {
+    throw new ForbiddenError("User Doesn't have permission to create chapter")
+  }
   // Check if module exists
   const moduleExists = await Module.findById(moduleId);
   if (!moduleExists) {

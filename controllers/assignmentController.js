@@ -79,19 +79,19 @@ const createAssignment = async (req, res, next) => {
     }
     if (!title || !createdBy) throw new BadRequestError("Title and createdBy are required.");
 
-    // 1. Get student list if assignedTo is empty or contains 'all'
+    // Get student list if assignedTo is empty or contains 'all'
     let studentIds = assignedTo;
     if (assignedTo.length === 0 || assignedTo.includes('all')) {
       const validCourse = await Course.findById(courseId).session(session);
       if (!validCourse) throw new BadRequestError("Invalid courseId provided.");
-      // Step 1: Get user IDs of students in this course
+      //  Get user IDs of students in this course
       const allUsers = await User.find()
         .populate('roleId')
         .session(session)
 
       const studentUsers = allUsers.filter(user => user.roleId?.role_name == 'Student');
       const studentUserIds = studentUsers.map(u => u._id);
-      // Step 2: Get matching student records
+      // Get matching student records
       const enrolledStudents = await Student.find({
         userId: { $in: studentUserIds },
         courseId: courseId
@@ -101,10 +101,10 @@ const createAssignment = async (req, res, next) => {
 
     if (studentIds?.length == 0) return res.status(404).json({ status: "error", message: "No students registered in this course" });
 
-    // 2. Upload files to S3 and calculate size
+    // Upload files to S3 and calculate size
     const processedFiles = await processAssignmentFiles(files);
 
-    // 3. Create Assignment
+    // Create Assignment
     const [assignment] = await Assignment.create(
       [{
         title,
@@ -119,7 +119,7 @@ const createAssignment = async (req, res, next) => {
       { session }
     );
 
-    // 4. Create AssignmentSubmissions per student
+    // Create AssignmentSubmissions per student
     const submissions = studentIds.map(studentId => ({
       assignmentId: assignment._id,
       studentId,
