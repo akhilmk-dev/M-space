@@ -23,4 +23,7 @@ router.get("/course/:courseId",authenticate, tutorController.getTutorsByCourseId
 // change password for tutor
 router.post('/change-password',authenticate,tutorController.changeTutorPassword);
 
+// tutor profile update
+router.post('/profile',authenticate,validateMiddleware(updateTutorSchema),tutorController.updateTutorProfile)
+
 module.exports = router;

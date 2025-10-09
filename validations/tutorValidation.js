@@ -24,7 +24,17 @@ export const addTutorSchema = Joi.object({
   courseIds: Joi.array().items(Joi.string().required()).min(1).required().messages({
     "array.min": "At least one course must be selected",
   }),
-  roleId:Joi.string()
+  roleId:Joi.string(),
+  profile_image: Joi.string()
+      .allow(null) 
+      .optional()
+      .custom((value, helpers) => {
+        const regex = /^data:image\/(png|jpeg|jpg|gif);base64,[A-Za-z0-9+/=]+$/;
+        if (!regex.test(value)) {
+          return helpers.message('profile_image must be a valid base64 image string');
+        }
+        return value;
+  }),
 });
 
 // Update Tutor (password optional)
@@ -44,11 +54,9 @@ export const updateTutorSchema = Joi.object({
       "string.empty": "Phone number is required",
       "string.pattern.base": "Phone number must be exactly 10 digits",
     }),
-  password: Joi.string().min(6).allow("").messages({
-    "string.min": "Password must be at least 6 characters",
-  }),
   courseIds: Joi.array().items(Joi.string().required()).min(1).required().messages({
     "array.min": "At least one course must be selected",
   }),
-  roleId:Joi.string()
+  roleId:Joi.string(),
+  profile_image: Joi.string().optional().allow(null)
 });

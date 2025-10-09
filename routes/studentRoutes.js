@@ -1,5 +1,5 @@
 const express = require('express');
-const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId, listStudentsByTutor, getStudentDetailsWithSubmissions, changeStudentPassword } = require('../controllers/studentController');
+const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId, listStudentsByTutor, getStudentDetailsWithSubmissions, changeStudentPassword, updateStudentProfile } = require('../controllers/studentController');
 const { authenticate } = require('../middleware/authMiddleware');
 const { addStudentSchema, updateStudentSchema } = require('../validations/studentValidation');
 const validateMiddleware = require('../utils/validate');
@@ -17,12 +17,19 @@ router.get('/',authenticate, listStudents );
 // Delete student
 router.delete('/:studentId',authenticate, deleteStudent);
 
+// get students in the course
 router.get('/by-course/:courseId',authenticate, getStudentsByCourseId);
 
+// list students for tutor
 router.get('/by-tutor/:tutorId',authenticate,listStudentsByTutor);
 
+// student details with submissions
 router.get('/student-details/:studentId',authenticate,getStudentDetailsWithSubmissions);
 
-router.post('/change-password',authenticate,changeStudentPassword)
+// change password for student
+router.post('/change-password',authenticate,changeStudentPassword);
+
+// profile update by student
+router.post('/profile',authenticate,validateMiddleware(updateStudentSchema),updateStudentProfile);
 
 module.exports = router;

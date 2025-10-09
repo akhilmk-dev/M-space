@@ -54,9 +54,6 @@ export const updateStudentSchema = Joi.object({
       "string.empty": "Phone number is required",
       "string.pattern.base": "Phone number must be exactly 10 digits",
   }),
-  password: Joi.string().min(6).allow("").messages({
-    "string.min": "Password must be at least 6 characters",
-  }),
   courseId: Joi.string().required().messages({
     "string.empty": "Course is required",
   }),

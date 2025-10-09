@@ -9,100 +9,127 @@ const {
     NotFoundError,
     ConflictError,
     InternalServerError,
+    ForbiddenError,
 } = require("../utils/customErrors");
 const checkDependencies = require("../helper/checkDependencies");
+const { uploadBase64ToS3 } = require("../utils/s3Uploader");
 
 // Create tutor
 async function createTutor(req, res, next) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    try {
-        const { name, email, phone, password, courseIds } = req.body;
+  try {
+    const { name, email, phone, password, courseIds, profile_image } = req.body;
 
-        if (!name || !email || !phone || !password || !courseIds || !courseIds.length) {
-            throw new BadRequestError("All fields are required, including at least one courseId.");
-        }
-
-        // check if user exists
-        const existingUser = await User.findOne({ email }).session(session);
-        if (existingUser) {
-            throw new ConflictError("Email already in use.");
-        }
-
-        // find tutor role
-        const tutorRole = await Roles.findOne({ role_name: /tutor/i }).session(session);
-        if (!tutorRole) {
-            throw new NotFoundError("Tutor role not found.");
-        }
-
-        // validate courses
-        for (const courseId of courseIds) {
-            if (!mongoose.Types.ObjectId.isValid(courseId)) {
-                throw new BadRequestError(`Invalid Course ID: ${courseId}`);
-            }
-            const course = await Course.findById(courseId).session(session);
-            if (!course) {
-                throw new NotFoundError(`Course not found: ${courseId}`);
-            }
-        }
-
-        // hash password
-        const passwordHash = await bcrypt.hash(password, 10);
-
-        // create user
-        const userDocs = await User.create(
-            [
-                {
-                    name,
-                    email,
-                    phone,
-                    passwordHash,
-                    roleId: tutorRole._id,
-                    status: true,
-                },
-            ],
-            { session }
-        );
-        const user = userDocs[0];
-
-        // create tutor record
-        await Tutor.create(
-            [
-                {
-                    userId: user._id,
-                    courseIds,
-                },
-            ],
-            { session }
-        );
-        let courses = [];
-        if (courseIds?.length) {
-            const courseDocs = await Course.find({ _id: { $in: courseIds } }).lean();
-            courses = courseDocs.map((c) => ({
-                id: c._id,
-                title: c.title,
-            }));
-        }
-        await session.commitTransaction();
-        session.endSession();
-
-        res.status(201).json({
-            message: "Tutor created successfully.",
-            data: {
-                id: user._id,
-                name: user.name,
-                email: user.email,
-                phone:user.phone,
-                courses,
-            },
-        });
-    } catch (err) {
-        await session.abortTransaction();
-        session.endSession();
-        next(err);
+    if (!name || !email || !phone || !password || !courseIds || !courseIds.length) {
+      throw new BadRequestError("All fields are required, including at least one courseId.");
     }
+
+    // Check if user exists
+    const existingUser = await User.findOne({ email }).session(session);
+    if (existingUser) {
+      throw new ConflictError("Email already in use.");
+    }
+
+    // Find tutor role
+    const tutorRole = await Roles.findOne({ role_name: /tutor/i }).session(session);
+    if (!tutorRole) {
+      throw new NotFoundError("Tutor role not found.");
+    }
+
+    // Validate each course
+    for (const courseId of courseIds) {
+      if (!mongoose.Types.ObjectId.isValid(courseId)) {
+        throw new BadRequestError(`Invalid Course ID: ${courseId}`);
+      }
+      const course = await Course.findById(courseId).session(session);
+      if (!course) {
+        throw new NotFoundError(`Course not found: ${courseId}`);
+      }
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Upload profile image if provided
+    let profileImageUrl = null;
+    if (profile_image) {
+      const isBase64 = /^data:image\/(png|jpeg|jpg|gif);base64,/.test(profile_image);
+      const isUrl = /^https?:\/\//i.test(profile_image);
+
+      if (isBase64) {
+        try {
+          profileImageUrl = await uploadBase64ToS3(profile_image, "tutor-profiles");
+        } catch (err) {
+          throw new BadRequestError("Error uploading profile image to S3: " + err.message);
+        }
+      } else if (isUrl) {
+        profileImageUrl = profile_image; 
+      } else {
+        throw new BadRequestError("Invalid profile image format. Must be base64 or https URL.");
+      }
+    }
+
+    // Create user
+    const userDocs = await User.create(
+      [
+        {
+          name,
+          email,
+          phone,
+          passwordHash,
+          roleId: tutorRole._id,
+          status: true,
+        },
+      ],
+      { session }
+    );
+    const user = userDocs[0];
+
+    // Create tutor record
+    await Tutor.create(
+      [
+        {
+          userId: user._id,
+          courseIds,
+          profile_image: profileImageUrl,
+        },
+      ],
+      { session }
+    );
+
+    // Fetch course details for response
+    let courses = [];
+    if (courseIds?.length) {
+      const courseDocs = await Course.find({ _id: { $in: courseIds } }).lean();
+      courses = courseDocs.map((c) => ({
+        id: c._id,
+        title: c.title,
+      }));
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.status(201).json({
+      message: "Tutor created successfully.",
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        profileImage: profileImageUrl,
+        courses,
+      },
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    next(err);
+  }
 }
+
 
 // List tutors with pagination & search
 async function listTutors(req, res, next) {
@@ -189,90 +216,116 @@ async function listTutors(req, res, next) {
   
 // Update tutor
 async function updateTutor(req, res, next) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    try {
-        const { tutorId } = req.params;
-        const { name, email, phone, courseIds } = req.body;
+  try {
+    const { tutorId } = req.params;
+    const { name, email, phone, courseIds, profile_image } = req.body;
 
-        if (!mongoose.Types.ObjectId.isValid(tutorId)) {
-            throw new BadRequestError("Invalid tutor ID");
-        }
-
-        const user = await User.findById(tutorId).session(session);
-        if (!user) {
-            throw new NotFoundError("User not found");
-        }
-
-        const role = await Roles.findById(user.roleId).session(session);
-        if (!role || !/tutor/i.test(role.role_name)) {
-            throw new BadRequestError("User is not a tutor");
-        }
-
-        if (courseIds && courseIds.length) {
-            for (const courseId of courseIds) {
-                if (!mongoose.Types.ObjectId.isValid(courseId)) {
-                    throw new BadRequestError(`Invalid course ID: ${courseId}`);
-                }
-                const course = await Course.findById(courseId).session(session);
-                if (!course) {
-                    throw new NotFoundError(`Course not found: ${courseId}`);
-                }
-            }
-        }
-
-        if (name) user.name = name;
-        if (email) {
-            const existing = await User.findOne({ email, _id: { $ne: tutorId } }).session(session);
-            if (existing) {
-                throw new ConflictError("Email already in use by another user");
-            }
-            user.email = email;
-        }
-        if (phone) user.phone = phone;
-
-        await user.save({ session });
-
-        const tutorInfo = await Tutor.findOne({ userId: tutorId }).session(session);
-        if (!tutorInfo) {
-            await Tutor.create([{ userId: tutorId, courseIds }], { session });
-        } else {
-            if (courseIds && courseIds.length) tutorInfo.courseIds = courseIds;
-            await tutorInfo.save({ session });
-        }
-
-        const tutorRecord = await Tutor.findOne({ userId: tutorId }).lean();
-
-        let courses = [];
-        if (courseIds?.length) {
-            const courseDocs = await Course.find({ _id: { $in: courseIds } }).lean();
-            courses = courseDocs.map((c) => ({
-                id: c._id,
-                title: c.title,
-            }));
-        }
-
-        await session.commitTransaction();
-        session.endSession();
-
-        res.json({
-            message: "Tutor updated successfully",
-            data: {
-                id: user._id,
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-                role:role?.role_name,
-                courses,
-            },
-        });
-    } catch (err) {
-        await session.abortTransaction();
-        session.endSession();
-        next(err);
+    // Validate tutor ID
+    if (!mongoose.Types.ObjectId.isValid(tutorId)) {
+      throw new BadRequestError("Invalid tutor ID");
     }
+
+    const user = await User.findById(tutorId).session(session);
+    if (!user) {
+      throw new NotFoundError("User not found");
+    }
+
+    // Check role
+    const role = await Roles.findById(user.roleId).session(session);
+    if (!role || !/tutor/i.test(role.role_name)) {
+      throw new BadRequestError("User is not a tutor");
+    }
+
+    // Validate and check all courses if provided
+    if (courseIds && courseIds.length) {
+      for (const courseId of courseIds) {
+        if (!mongoose.Types.ObjectId.isValid(courseId)) {
+          throw new BadRequestError(`Invalid course ID: ${courseId}`);
+        }
+        const course = await Course.findById(courseId).session(session);
+        if (!course) {
+          throw new NotFoundError(`Course not found: ${courseId}`);
+        }
+      }
+    }
+
+    // Update user details
+    if (name) user.name = name;
+    if (email) {
+      const existing = await User.findOne({ email, _id: { $ne: tutorId } }).session(session);
+      if (existing) {
+        throw new ConflictError("Email already in use by another user");
+      }
+      user.email = email;
+    }
+    if (phone) user.phone = phone;
+
+    await user.save({ session });
+
+    // Find Tutor record
+    let tutorInfo = await Tutor.findOne({ userId: tutorId }).session(session);
+    if (!tutorInfo) {
+      tutorInfo = await Tutor.create([{ userId: tutorId, courseIds }], { session });
+    } else {
+      // Profile image logic
+      if (profile_image) {
+        const isBase64 = /^data:image\/(png|jpeg|jpg|gif);base64,/.test(profile_image);
+        const isUrl = /^https?:\/\//i.test(profile_image);
+
+        if (isBase64) {
+          try {
+            const uploadedUrl = await uploadBase64ToS3(profile_image, "tutor-profiles");
+            tutorInfo.profile_image = uploadedUrl;
+          } catch (err) {
+            throw new BadRequestError("Error uploading profile image to S3: " + err.message);
+          }
+        } else if (!isUrl && profile_image.trim() !== "") {
+          throw new BadRequestError("Invalid profile image format. Must be base64 or https URL.");
+        }
+        // If URL or null, we do not modify the profile_image
+      }
+
+      if (courseIds && courseIds.length) tutorInfo.courseIds = courseIds;
+      await tutorInfo.save({ session });
+    }
+
+    // Get updated tutor info for response
+    const tutorRecord = await Tutor.findOne({ userId: tutorId }).lean();
+    let courses = [];
+
+    if (tutorRecord?.courseIds?.length) {
+      const courseDocs = await Course.find({ _id: { $in: tutorRecord.courseIds } }).lean();
+      courses = courseDocs.map((c) => ({
+        id: c._id,
+        title: c.title,
+      }));
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({
+      message: "Tutor updated successfully",
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: role?.role_name,
+        profileImage: tutorRecord?.profile_image,
+        courses,
+      },
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    next(err);
+  }
 }
+
 
 // Delete tutor
 async function deleteTutor(req, res, next) {
@@ -419,6 +472,109 @@ const changeTutorPassword = async (req, res, next) => {
   }
 };
 
+const updateTutorProfile = async(req, res, next) =>{
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const tutorId = req.user.id;
+    const { name, email, phone, courseIds, profile_image } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(tutorId)) {
+      throw new BadRequestError("Invalid tutor ID");
+    }
+
+    const user = await User.findById(tutorId).session(session);
+    if (!user) throw new NotFoundError("User not found");
+
+    const role = await Roles.findById(user.roleId).session(session);
+    if (!role || !/tutor/i.test(role.role_name)) {
+      throw new ForbiddenError("User is not a tutor");
+    }
+
+    // Validate courses
+    if (courseIds && courseIds.length) {
+      for (const courseId of courseIds) {
+        if (!mongoose.Types.ObjectId.isValid(courseId)) {
+          throw new BadRequestError(`Invalid course ID: ${courseId}`);
+        }
+        const course = await Course.findById(courseId).session(session);
+        if (!course) throw new NotFoundError(`Course not found: ${courseId}`);
+      }
+    }
+
+    // Update basic user info
+    if (name) user.name = name;
+    if (email) {
+      const existing = await User.findOne({ email, _id: { $ne: tutorId } }).session(session);
+      if (existing) throw new ConflictError("Email already in use by another user");
+      user.email = email;
+    }
+    if (phone) user.phone = phone;
+
+    await user.save({ session });
+
+    // Update Tutor record
+    let tutorInfo = await Tutor.findOne({ userId: tutorId }).session(session);
+    if (!tutorInfo) {
+      tutorInfo = await Tutor.create([{ userId: tutorId, courseIds }], { session });
+    } else {
+      // Handle profile image
+      if (profile_image) {
+        const isBase64 = /^data:image\/(png|jpeg|jpg|gif);base64,/.test(profile_image);
+        const isUrl = /^https?:\/\//i.test(profile_image);
+
+        if (isBase64) {
+          try {
+            const uploadedUrl = await uploadBase64ToS3(profile_image, "tutor-profiles");
+            tutorInfo.profile_image = uploadedUrl;
+          } catch (err) {
+            throw new BadRequestError("Error uploading profile image to S3: " + err.message);
+          }
+        } else if (!isUrl && profile_image.trim() !== "") {
+          throw new BadRequestError("Invalid profile image format. Must be base64 or https URL.");
+        }
+      }
+
+      if (courseIds && courseIds.length) tutorInfo.courseIds = courseIds;
+      await tutorInfo.save({ session });
+    }
+
+    // Prepare response
+    const tutorRecord = await Tutor.findOne({ userId: tutorId }).lean();
+    let courses = [];
+
+    if (tutorRecord?.courseIds?.length) {
+      const courseDocs = await Course.find({ _id: { $in: tutorRecord.courseIds } }).lean();
+      courses = courseDocs.map((c) => ({
+        id: c._id,
+        title: c.title,
+      }));
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({
+      message: "Profile updated successfully",
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: role?.role_name,
+        profileImage: tutorRecord?.profile_image,
+        courses,
+      },
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    next(err);
+  }
+}
+
+
 
 module.exports = {
     createTutor,
@@ -426,5 +582,6 @@ module.exports = {
     updateTutor,
     deleteTutor,
     getTutorsByCourseId,
-    changeTutorPassword
+    changeTutorPassword,
+    updateTutorProfile
 };

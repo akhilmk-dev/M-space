@@ -321,8 +321,6 @@ exports.getLessonsByChapterIdForStudent = async (req, res, next) => {
 exports.getAllLessons = async (req, res, next) => {
   try {
     const {
-      courseId,
-      moduleId,
       chapterId,
       search = "",
       sortBy = "orderIndex",
@@ -334,8 +332,6 @@ exports.getAllLessons = async (req, res, next) => {
     const filter = {};
 
     // Filters
-    if (courseId) filter.courseId = courseId;
-    if (moduleId) filter.moduleId = moduleId;
     if (chapterId) filter.chapterId = chapterId;
     if (search) filter.title = { $regex: search, $options: "i" };
 
@@ -376,8 +372,6 @@ exports.getAllLessons = async (req, res, next) => {
     next(err);
   }
 };
-
-
 
 // exports.updateLessons = async (req, res, next) => {
 //   try {

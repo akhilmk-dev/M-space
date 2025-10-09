@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Course = require('../models/Course');
 const Student = require('../models/Student');
-const { BadRequestError, NotFoundError, ConflictError, UnAuthorizedError, InternalServerError } = require('../utils/customErrors'); // adjust your error classes
+const { BadRequestError, NotFoundError, ConflictError, UnAuthorizedError, InternalServerError, ForbiddenError } = require('../utils/customErrors'); // adjust your error classes
 const Roles = require('../models/Roles');
 const bcrypt = require("bcrypt");
 const checkDependencies = require('../helper/checkDependencies');
@@ -601,6 +601,96 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
   }
 };
 
+const  updateStudentProfile = async(req, res, next)=> {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const studentId = req.user.id; 
+    const { name, email, phone, courseId, profile_image } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      throw new BadRequestError("Invalid student ID");
+    }
+
+    const user = await User.findById(studentId).session(session);
+    if (!user) throw new NotFoundError("User not found");
+
+    const role = await Roles.findById(user.roleId).session(session);
+    if (!role || !/student/i.test(role.role_name)) {
+      throw new ForbiddenError("User is not a student");
+    }
+
+    // Validate course if provided
+    let course = null;
+    if (courseId) {
+      if (!mongoose.Types.ObjectId.isValid(courseId)) {
+        throw new BadRequestError("Invalid course ID");
+      }
+      course = await Course.findById(courseId).session(session);
+      if (!course) throw new NotFoundError("Course not found");
+    }
+
+    // Update user details
+    if (name) user.name = name;
+    if (email) {
+      const existing = await User.findOne({ email, _id: { $ne: studentId } }).session(session);
+      if (existing) throw new ConflictError("Email already in use by another user");
+      user.email = email;
+    }
+    if (phone) user.phone = phone;
+
+    await user.save({ session });
+
+    // Update student record
+    let studentInfo = await Student.findOne({ userId: studentId }).session(session);
+    if (!studentInfo) {
+      studentInfo = await Student.create([{ userId: studentId, courseId }], { session });
+    } else {
+      // handle profile image
+      if (profile_image) {
+        const isBase64 = /^data:image\/(png|jpeg|jpg|gif);base64,/.test(profile_image);
+        const isUrl = /^https?:\/\//i.test(profile_image);
+
+        if (isBase64) {
+          try {
+            const uploadedUrl = await uploadBase64ToS3(profile_image, "student-profiles");
+            studentInfo.profile_image = uploadedUrl;
+          } catch (err) {
+            throw new BadRequestError("Error uploading profile image to S3: " + err.message);
+          }
+        } else if (!isUrl && profile_image.trim() !== "") {
+          throw new BadRequestError("Invalid profile image format. Must be base64 or https URL.");
+        }
+        // If null or existing URL, skip update
+      }
+
+      if (courseId) studentInfo.courseId = courseId;
+      await studentInfo.save({ session });
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    res.json({
+      message: "Profile updated successfully",
+      data: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        profileImage: studentInfo.profile_image,
+        course: course ? { id: course._id, title: course.title } : undefined,
+      },
+    });
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    next(err);
+  }
+}
+
+
 module.exports = {
   createStudent,
   listStudents,
@@ -609,5 +699,6 @@ module.exports = {
   getStudentsByCourseId,
   listStudentsByTutor,
   getStudentDetailsWithSubmissions,
-  changeStudentPassword
+  changeStudentPassword,
+  updateStudentProfile
 };
