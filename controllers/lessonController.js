@@ -354,6 +354,8 @@ exports.getAllLessons = async (req, res, next) => {
     const limitNum = Math.max(1, parseInt(limit));
     const skip = (pageNum - 1) * limitNum;
 
+    let sortField = 'createdAt';
+    let sortOrder = -1; // default: descending
     // Sorting setup
     if (req.query.sortBy) {
       const [field, order] = req.query.sortBy.split(':');
