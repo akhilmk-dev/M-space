@@ -8,6 +8,7 @@ const bcrypt = require("bcrypt");
 const checkDependencies = require('../helper/checkDependencies');
 const Tutor = require('../models/Tutor');
 const AssignmentSubmission = require('../models/AssignmentSubmission');
+const { uploadBase64ToS3 } = require('../utils/s3Uploader');
 
 // Create only student (you already have)
 const createStudent = async(req, res, next)=> {
@@ -15,8 +16,7 @@ const createStudent = async(req, res, next)=> {
   session.startTransaction();
 
   try {
-    const { name, email, phone, password, courseId } = req.body;
-
+    const { name, email, phone, password, courseId, profile_image } = req.body;
     if (!name || !email || !phone || !password || !courseId) {
       throw new BadRequestError("All fields are required");
     }
@@ -45,6 +45,16 @@ const createStudent = async(req, res, next)=> {
     // hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // upload profile image if provided
+    let profileImageUrl = null;
+    if (profile_image) {
+      try {
+        profileImageUrl = await uploadBase64ToS3(profile_image, "student-profiles");
+      } catch (err) {
+        throw new BadRequestError("Error uploading profile image to S3: " + err.message);
+      }
+    }
+
     // create user
     const userDocs = await User.create(
       [{
@@ -53,21 +63,23 @@ const createStudent = async(req, res, next)=> {
         phone,
         passwordHash,
         roleId: studentRole._id,
-        status: true,
+        status: true
       }],
       { session }
     );
     const user = userDocs[0];
 
     // create student record
-    await Student.create(
+  const student = await Student.create(
       [{
         userId: user._id,
         courseId,
         enrollmentDate: new Date(),
+        profile_image: profileImageUrl,
       }],
       { session }
     );
+    console.log(student,"student")
 
     await session.commitTransaction();
     session.endSession();
@@ -79,6 +91,7 @@ const createStudent = async(req, res, next)=> {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        profileImage: student[0].profile_image,
         course: {
           id: course._id,
           title: course.title,
@@ -90,7 +103,7 @@ const createStudent = async(req, res, next)=> {
     session.endSession();
     next(err);
   }
-}
+};
 
 // List students with pagination & search
 async function listStudents(req, res, next) {
@@ -180,10 +193,10 @@ async function updateStudent(req, res, next) {
   session.startTransaction();
 
   try {
-    const { studentId } = req.params; // id of student user
-    const { name, email, phone, courseId } = req.body;
+    const { studentId } = req.params; // ID of student user
+    const { name, email, phone, courseId, profile_image } = req.body;
 
-    // Validate
+    // Validate student ID
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
       throw new BadRequestError("Invalid student ID");
     }
@@ -199,7 +212,7 @@ async function updateStudent(req, res, next) {
       throw new BadRequestError("User is not a student");
     }
 
-    // Update course if provided
+    // Validate and fetch course if provided
     let course = null;
     if (courseId) {
       if (!mongoose.Types.ObjectId.isValid(courseId)) {
@@ -211,10 +224,9 @@ async function updateStudent(req, res, next) {
       }
     }
 
-    // Update user fields
+    // Update basic user fields
     if (name) user.name = name;
     if (email) {
-      // check duplicate email
       const existing = await User.findOne({ email, _id: { $ne: studentId } }).session(session);
       if (existing) {
         throw new ConflictError("Email already in use by another user");
@@ -225,16 +237,32 @@ async function updateStudent(req, res, next) {
 
     await user.save({ session });
 
-    // Update Student record
-    const studentInfo = await Student.findOne({ userId: studentId }).session(session);
+    // Update student record
+    let studentInfo = await Student.findOne({ userId: studentId }).session(session);
     if (!studentInfo) {
-      // if not exist, create
-      await Student.create([{
+      studentInfo = await Student.create([{
         userId: studentId,
         courseId: courseId,
         enrollmentDate: new Date(),
       }], { session });
     } else {
+      // Handle profile image logic
+      if (profile_image) {
+        const isBase64 = /^data:image\/(png|jpeg|jpg|gif);base64,/.test(profile_image);
+        const isUrl = /^https?:\/\//i.test(profile_image);
+
+        if (isBase64) {
+          try {
+            const uploadedUrl = await uploadBase64ToS3(profile_image, "student-profiles");
+            studentInfo.profile_image = uploadedUrl;
+          } catch (err) {
+            throw new BadRequestError("Error uploading profile image to S3: " + err.message);
+          }
+        } else if (!isUrl && profile_image.trim() !== "") {
+          throw new BadRequestError("Invalid profile image format. Must be base64 or https URL.");
+        }
+      }
+
       if (courseId) studentInfo.courseId = courseId;
       await studentInfo.save({ session });
     }
@@ -249,9 +277,11 @@ async function updateStudent(req, res, next) {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        profileImage: studentInfo.profile_image,
         course: course ? { id: course._id, title: course.title } : undefined,
       }
     });
+
   } catch (err) {
     await session.abortTransaction();
     session.endSession();

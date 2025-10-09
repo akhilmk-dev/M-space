@@ -83,7 +83,7 @@ const reviewAssignment = async (req, res, next) => {
       }
   
       // Update the submission with mark and comment
-      submission.mark = mark;
+      submission.marks = mark;
       submission.comment = comment || "";
       submission.status = "reviewed";
       submission.reviewedAt = Date.now();

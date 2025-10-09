@@ -24,7 +24,17 @@ export const addStudentSchema = Joi.object({
   courseId: Joi.string().required().messages({
     "string.empty": "Course is required",
   }),
-  roleId:Joi.string()
+  roleId:Joi.string(),
+  profile_image: Joi.string()
+    .allow(null) 
+    .optional()
+    .custom((value, helpers) => {
+      const regex = /^data:image\/(png|jpeg|jpg|gif);base64,[A-Za-z0-9+/=]+$/;
+      if (!regex.test(value)) {
+        return helpers.message('profile_image must be a valid base64 image string');
+      }
+      return value;
+  }),
 });
 
 // Update Student (password optional)
@@ -43,12 +53,13 @@ export const updateStudentSchema = Joi.object({
     .messages({
       "string.empty": "Phone number is required",
       "string.pattern.base": "Phone number must be exactly 10 digits",
-    }),
+  }),
   password: Joi.string().min(6).allow("").messages({
     "string.min": "Password must be at least 6 characters",
   }),
   courseId: Joi.string().required().messages({
     "string.empty": "Course is required",
   }),
-  roleId:Joi.string()
+  roleId:Joi.string(),
+  profile_image: Joi.string().optional().allow(null)
 });

@@ -78,7 +78,6 @@ exports.createCourse = catchAsync(async (req, res) => {
   });
 });
 
-
 // Get All Courses
 exports.getAllCourses = catchAsync(async (req, res) => {
   // 1. Pagination
@@ -204,7 +203,6 @@ exports.updateCourse = catchAsync(async (req, res) => {
     },
   });
 });
-
 
 // Delete Course
 exports.deleteCourse = async (req, res, next) => {
