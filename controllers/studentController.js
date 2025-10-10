@@ -16,7 +16,6 @@ const Attendance = require('../models/Attendance');
 const createStudent = async(req, res, next)=> {
   const session = await mongoose.startSession();
   session.startTransaction();
-
   try {
     const isPermission = await hasPermission(req.user?.id, "Add Student");
     if (!isPermission ) {
@@ -413,7 +412,6 @@ const changeStudentPassword = async (req, res, next) => {
   }
 };
 
-
 const getStudentsByCourseIdForDropdown = async (req, res, next) => {
   try {
     const { courseId } = req.params;
@@ -673,7 +671,6 @@ const listStudentsByTutor = async (req, res, next) => {
   }
 };
 
-
 // get student details by id
 const getStudentDetailsWithSubmissions = async (req, res, next) => {
   try {
@@ -775,7 +772,6 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
   }
 };
 
-
 const  updateStudentProfile = async(req, res, next)=> {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -865,6 +861,62 @@ const  updateStudentProfile = async(req, res, next)=> {
   }
 }
 
+const studentHome = async (req, res, next) => {
+  try {
+    const studentId = req.user?.id; 
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({ success: false, message: "Invalid student ID" });
+    }
+    // Get student enrollment info
+    const student = await Student.findOne({ userId: studentId }).lean();
+    if (!student) return res.status(404).json({ success: false, message: "Student not found" });
+
+    const courseId = student.courseId;
+
+    // Calculate attendance
+    const attendanceStats = await Attendance.aggregate([
+      { $match: { studentId: new mongoose.Types.ObjectId(studentId), courseId: new mongoose.Types.ObjectId(courseId) } },
+      {
+        $group: {
+          _id: "$studentId",
+          totalDays: { $sum: 1 },
+          presentDays: { $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] } },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          attendancePercentage: {
+            $cond: [
+              { $eq: ["$totalDays", 0] },
+              0,
+              { $round: [{ $multiply: [{ $divide: ["$presentDays", "$totalDays"] }, 100] }, 2] },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const attendancePercentage = attendanceStats[0]?.attendancePercentage ?? 0;
+    // Pending assignments count
+    const pendingAssignmentsCount = await AssignmentSubmission.countDocuments({
+      studentId: new mongoose.Types.ObjectId(studentId),
+      status: { $ne: "Submitted" }, 
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        studentId,
+        courseId,
+        attendancePercentage,
+        pendingAssignmentsCount,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 
 
 module.exports = {
@@ -877,5 +929,6 @@ module.exports = {
   getStudentDetailsWithSubmissions,
   changeStudentPassword,
   updateStudentProfile,
+  studentHome,
   getStudentsByCourseIdForDropdown
 };

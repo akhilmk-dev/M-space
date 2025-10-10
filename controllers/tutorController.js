@@ -592,7 +592,6 @@ const updateTutorProfile = async(req, res, next) =>{
   }
 }
 
-
 module.exports = {
     createTutor,
     listTutors,
