@@ -1,5 +1,5 @@
 const express = require('express');
-const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId, listStudentsByTutor, getStudentDetailsWithSubmissions, changeStudentPassword, updateStudentProfile } = require('../controllers/studentController');
+const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId, listStudentsByTutor, getStudentDetailsWithSubmissions, changeStudentPassword, updateStudentProfile, getStudentsByCourseIdForDropdown } = require('../controllers/studentController');
 const { authenticate } = require('../middleware/authMiddleware');
 const { addStudentSchema, updateStudentSchema } = require('../validations/studentValidation');
 const validateMiddleware = require('../utils/validate');
@@ -19,6 +19,9 @@ router.delete('/:studentId',authenticate, deleteStudent);
 
 // get students in the course
 router.get('/by-course/:courseId',authenticate, getStudentsByCourseId);
+
+// get students by course
+router.get('/by-course/dropdown/:courseId',authenticate,getStudentsByCourseIdForDropdown)
 
 // list students for tutor
 router.get('/by-tutor/:tutorId',authenticate,listStudentsByTutor);

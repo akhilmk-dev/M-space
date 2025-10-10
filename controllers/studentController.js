@@ -413,7 +413,7 @@ const changeStudentPassword = async (req, res, next) => {
 };
 
 
-const getStudentsByCourseId = async (req, res, next) => {
+const getStudentsByCourseIdForDropdown = async (req, res, next) => {
   try {
     const { courseId } = req.params;
 
@@ -444,6 +444,75 @@ const getStudentsByCourseId = async (req, res, next) => {
         title: course.title,
       },
       total: result.length,
+      students: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const getStudentsByCourseId = async (req, res, next) => {
+  try {
+    const { courseId } = req.params;
+    const { date, page = 1, limit = 10 } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(courseId)) {
+      throw new BadRequestError("Invalid Course ID");
+    }
+
+    if (!date) {
+      throw new BadRequestError("Date query parameter is required");
+    }
+
+    // Check if course exists
+    const course = await Course.findById(courseId);
+    if (!course) throw new NotFoundError("Course not found.");
+
+    // Pagination calculation
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Find students enrolled in the course with pagination
+    const students = await Student.find({ courseId })
+      .populate("userId", "name email phone status createdAt")
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    const totalStudents = await Student.countDocuments({ courseId });
+
+    // Fetch attendance for the given date
+    const studentIds = students.map((s) => s.userId?._id);
+    const attendanceRecords = await Attendance.find({
+      courseId,
+      studentId: { $in: studentIds },
+      date: new Date(date),
+    }).lean();
+
+    // Map attendance by studentId
+    const attendanceMap = {};
+    attendanceRecords.forEach((att) => {
+      attendanceMap[att.studentId.toString()] = att.present;
+    });
+
+    // Prepare final result
+    const result = students.map((student) => ({
+      _id: student.userId?._id,
+      name: student.userId?.name,
+      email: student.userId?.email,
+      phone: student.userId?.phone,
+      status: student.userId?.status,
+      attendance: attendanceMap[student.userId?._id.toString()] ?? null, 
+    }));
+
+    res.status(200).json({
+      message: "Students fetched successfully",
+      course: {
+        id: course._id,
+        title: course.title,
+      },
+      page: parseInt(page),
+      limit: parseInt(limit),
+      total: totalStudents,
       students: result,
     });
   } catch (err) {
@@ -718,5 +787,6 @@ module.exports = {
   listStudentsByTutor,
   getStudentDetailsWithSubmissions,
   changeStudentPassword,
-  updateStudentProfile
+  updateStudentProfile,
+  getStudentsByCourseIdForDropdown
 };

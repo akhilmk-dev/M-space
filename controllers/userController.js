@@ -22,7 +22,6 @@ const createUser = async (req, res, next) => {
 
   try {
     const { name, email, phone, password, roleId } = req.body;
-
     // Check if user already exists
     const existingUser = await User.findOne({ email }).session(session);
     if (existingUser) {
