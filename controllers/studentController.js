@@ -477,7 +477,7 @@ const getStudentsByCourseId = async (req, res, next) => {
 
     // Filter by search (after population)
     if (search) {
-      const regex = new RegExp(search, "i"); // case-insensitive
+      const regex = new RegExp(search, "i");
       students = students.filter(
         (s) =>
           s.userId?.name?.match(regex) ||
@@ -526,7 +526,6 @@ const getStudentsByCourseId = async (req, res, next) => {
     next(err);
   }
 };
-
 
 // list students by tutor
 const listStudentsByTutor = async (req, res, next) => {
@@ -784,6 +783,8 @@ const  updateStudentProfile = async(req, res, next)=> {
     next(err);
   }
 }
+
+
 
 module.exports = {
   createStudent,

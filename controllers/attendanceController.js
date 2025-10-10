@@ -1,8 +1,10 @@
 const { default: mongoose } = require("mongoose");
 const Attendance = require("../models/Attendance");
+const PDFDocument = require("pdfkit");
 const Course = require("../models/Course");
 const User = require("../models/User");
 const { NotFoundError, ForbiddenError, BadRequestError } = require("../utils/customErrors");
+const { uploadBase64ToS3 } = require("../utils/s3Uploader");
 
 exports.markAttendance = async (req, res, next) => {
     try {
@@ -65,7 +67,7 @@ exports.markAttendance = async (req, res, next) => {
     } catch (error) {
       next(error);
     }
-  };
+};
 
 exports.getAttendanceReport = async (req, res) => {
     try {
@@ -156,4 +158,168 @@ exports.getAttendanceReport = async (req, res) => {
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
     }
+};
+
+exports.generateAttendanceReportPdf = async (req, res) => {
+    try {
+      const { courseId } = req.params;
+      const { startDate, endDate } = req.query;
+  
+      if (!courseId || !startDate || !endDate) {
+        return res.status(400).json({
+          success: false,
+          message: "courseId, startDate, and endDate are required",
+        });
+      }
+  
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+  
+      const course = await Course.findById(courseId).select("title");
+      if (!course) {
+        return res.status(404).json({ success: false, message: "Course not found" });
+      }
+  
+      // Aggregate attendance data
+      const report = await Attendance.aggregate([
+        {
+          $match: {
+            courseId: new mongoose.Types.ObjectId(courseId),
+            date: { $gte: start, $lte: end },
+          },
+        },
+        {
+          $group: {
+            _id: "$studentId",
+            totalDays: { $sum: 1 },
+            presentDays: { $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] } },
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "_id",
+            foreignField: "_id",
+            as: "student",
+          },
+        },
+        { $unwind: "$student" },
+        {
+          $project: {
+            _id: 0,
+            studentId: "$_id",
+            studentName: "$student.name",
+            totalDays: 1,
+            presentDays: 1,
+            attendancePercentage: {
+              $cond: [
+                { $eq: ["$totalDays", 0] },
+                0,
+                {
+                  $round: [
+                    {
+                      $multiply: [
+                        { $divide: ["$presentDays", "$totalDays"] },
+                        100,
+                      ],
+                    },
+                    2,
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        { $sort: { studentName: 1 } },
+      ]);
+  
+      // --- Generate PDF ---
+      const doc = new PDFDocument({ margin: 50 });
+      const chunks = [];
+  
+      doc.on("data", (chunk) => chunks.push(chunk));
+      doc.on("end", async () => {
+        const pdfBuffer = Buffer.concat(chunks);
+        const base64PDF = `data:application/pdf;base64,${pdfBuffer.toString("base64")}`;
+        const s3Url = await uploadBase64ToS3(base64PDF, "attendance-reports");
+  
+        return res.json({
+          success: true,
+          message: "Attendance report generated successfully",
+          fileUrl:s3Url,
+        });
+      });
+  
+      // --- Header ---
+      doc.fontSize(18).text(`Attendance Report - ${course.title}`, { align: "center" });
+      doc.moveDown();
+      doc.fontSize(12).text(`From: ${startDate}  To: ${endDate}`);
+      doc.moveDown();
+      doc.text(`Generated on: ${new Date().toLocaleString()}`);
+      doc.moveDown(2);
+  
+      // --- Table Setup ---
+      const tableTop = doc.y;
+      const colWidths = [220, 100, 100, 100];
+      const headers = ["Student Name", "Total Days", "Present Days", "Attendance %"];
+  
+      // Header Row
+      let x = 50;
+      doc.font("Helvetica-Bold").fontSize(12);
+      headers.forEach((header, i) => {
+        doc.rect(x, tableTop, colWidths[i], 25).stroke();
+        doc.text(header, x + 5, tableTop + 7);
+        x += colWidths[i];
+      });
+  
+      // Data Rows
+      let y = tableTop + 25;
+      doc.font("Helvetica").fontSize(11);
+  
+      report.forEach((r) => {
+        x = 50;
+        const rowHeight = 25;
+        const attendancePercentage = isNaN(r.attendancePercentage)
+          ? 0
+          : r.attendancePercentage;
+  
+        const rowValues = [
+          r.studentName || "N/A",
+          String(r.totalDays || 0),
+          String(r.presentDays || 0),
+          `${attendancePercentage}%`,
+        ];
+  
+        rowValues.forEach((text, i) => {
+          doc.rect(x, y, colWidths[i], rowHeight).stroke();
+          doc.text(text, x + 5, y + 8, {
+            width: colWidths[i] - 10,
+            align: i === 0 ? "left" : "center",
+          });
+          x += colWidths[i];
+        });
+  
+        y += rowHeight;
+  
+        // Add new page if overflowing
+        if (y > doc.page.height - 100) {
+          doc.addPage();
+          y = 50;
+        }
+      });
+  
+      doc.end();
+    } catch (error) {
+      console.error("Error generating attendance report:", error);
+      res.status(500).json({ success: false, message: error.message });
+    }
   };
+  
+  
+  
+  
+  
+  
+  
+  
