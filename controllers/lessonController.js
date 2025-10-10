@@ -10,6 +10,7 @@ const Student = require('../models/Student');
 const Tutor = require('../models/Tutor');
 const LessonCompletion = require('../models/LessonCompletion');
 const hasPermission = require('../helper/hasPermission');
+const catchAsync = require('../utils/catchAsync');
 
 exports.createLessons = async (req, res) => {
   try {
@@ -99,33 +100,41 @@ exports.updateSingleLesson = async (req, res, next) => {
   }
 };
 
-exports.deleteLesson = async (req, res, next) => {
-  try {
-    const { lessonId } = req.params;
-    const isPermission = await hasPermission(req.user?.id, "Delete Lesson");
-    if (!isPermission ) {
-      throw new ForbiddenError("User Doesn't have permission to delete lesson")
-    }
-    if (!mongoose.Types.ObjectId.isValid(lessonId)) {
-      throw new NotFoundError('Invalid lesson ID');
-    }
+exports.deleteLesson = catchAsync(async (req, res) => {
+  const { lessonId } = req.params;
 
-    const lesson = await Lesson.findByIdAndDelete(lessonId);
-    if (!lesson) {
-      throw new NotFoundError('Lesson not found');
-    }
-
-    //  Remove references from other collections
-    await removeReferencesGlobally(lessonId);
-
-    res.status(200).json({
-      status: 'success',
-      message: 'Lesson deleted and references removed successfully',
-    });
-  } catch (err) {
-    next(err);
+  // Permission check
+  const isPermission = await hasPermission(req.user?.id, "Delete Lesson");
+  if (!isPermission) {
+    throw new ForbiddenError("User doesn't have permission to delete lesson");
   }
-};
+
+  // Validate ObjectId
+  if (!mongoose.Types.ObjectId.isValid(lessonId)) {
+    throw new NotFoundError("Invalid lesson ID");
+  }
+
+  //  Check if lesson exists
+  const lesson = await Lesson.findById(lessonId);
+  if (!lesson) {
+    throw new NotFoundError("Lesson not found");
+  }
+
+  // Example: Lessons might be referenced in Chapters, Assignments, or Attendance
+  await checkDependencies("Chapter", lessonId, ["lessonId"]);
+  await checkDependencies("Assignment", lessonId, ["lessonId"]);
+  await checkDependencies("Attendance", lessonId, ["lessonId"]);
+
+  //  Delete the lesson
+  const deletedLesson = await Lesson.findByIdAndDelete(lessonId);
+
+  //  Send response
+  res.status(200).json({
+    status: "success",
+    message: "Lesson deleted successfully",
+    data: deletedLesson,
+  });
+});
 
 exports.getLessonById = async (req, res, next) => {
   try {
