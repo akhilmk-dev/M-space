@@ -640,29 +640,65 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
       throw new BadRequestError("Invalid Student ID.");
     }
 
-    //  Get student user
+    // Get student user
     const user = await User.findById(studentId).lean();
     if (!user) throw new NotFoundError("Student not found.");
 
-    //  Get student record (enrollment info)
+    // Get student record (enrollment info)
     const studentInfo = await Student.findOne({ userId: studentId }).lean();
     if (!studentInfo) throw new NotFoundError("Student enrollment not found.");
 
-    //  Get course details
+    // Get course details
     const course = await Course.findById(studentInfo.courseId).lean();
-    const attendancePercentage = Math.floor(Math.random() * (100 - 60 + 1)) + 60; 
-    // Fetch submissions (with filters + pagination)
-    const filter = { studentId: studentInfo.userId }; // note: studentInfo._id (not userId)
-    if (status) {
-      filter.status = status;
-    }
+
+    // Calculate real attendance percentage
+    const attendanceStats = await Attendance.aggregate([
+      {
+        $match: {
+          courseId: new mongoose.Types.ObjectId(studentInfo.courseId),
+          studentId: new mongoose.Types.ObjectId(studentId),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalDays: { $sum: 1 },
+          presentDays: {
+            $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          attendancePercentage: {
+            $cond: [
+              { $eq: ["$totalDays", 0] },
+              0,
+              {
+                $round: [
+                  { $multiply: [{ $divide: ["$presentDays", "$totalDays"] }, 100] },
+                  2,
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const attendancePercentage = attendanceStats[0]?.attendancePercentage || 0;
+
+    // Build submission filter
+    const filter = { studentId: studentInfo.userId };
+    if (status) filter.status = status;
 
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.max(1, parseInt(limit));
     const skip = (pageNum - 1) * limitNum;
 
+    // Fetch submissions with pagination
     const totalSubmissions = await AssignmentSubmission.countDocuments(filter);
-
     const submissions = await AssignmentSubmission.find(filter)
       .populate("assignmentId", "title deadline description")
       .sort({ createdAt: -1 })
@@ -688,12 +724,13 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
         page: pageNum,
         limit: limitNum,
         totalPages: Math.ceil(totalSubmissions / limitNum),
-      }
+      },
     });
   } catch (err) {
     next(err);
   }
 };
+
 
 const  updateStudentProfile = async(req, res, next)=> {
   const session = await mongoose.startSession();
