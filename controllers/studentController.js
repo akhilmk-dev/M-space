@@ -542,13 +542,12 @@ const listStudentsByTutor = async (req, res, next) => {
     const searchRegex = new RegExp(search, "i");
 
     // Fetch tutor and their courses
-    const tutor = await Tutor.findOne({userId:tutorId}).lean();
+    const tutor = await Tutor.findOne({ userId: tutorId }).lean();
     if (!tutor) throw new NotFoundError("Tutor not found.");
 
     let tutorCourseIds = tutor.courseIds || [];
     if (courseId) {
-      const tutorCourseIdsStr = tutorCourseIds.map(id => id.toString());
-
+      const tutorCourseIdsStr = tutorCourseIds.map((id) => id.toString());
       if (!tutorCourseIdsStr.includes(courseId.toString())) {
         return res.json({
           status: "success",
@@ -573,14 +572,11 @@ const listStudentsByTutor = async (req, res, next) => {
       });
     }
 
-    // Find students in these courses
+    // Get student role
     const studentRole = await Roles.findOne({ role_name: /student/i });
     if (!studentRole) throw new NotFoundError("Student role not found.");
 
-    const match = {
-      roleId: studentRole._id,
-    };
-
+    // Fetch students
     const studentInfos = await Student.find({
       courseId: { $in: tutorCourseIds },
     })
@@ -600,18 +596,65 @@ const listStudentsByTutor = async (req, res, next) => {
       .limit(parseInt(limit))
       .lean();
 
-    // Filter out students whose userId is null due to search
-    const students = studentInfos
-      .filter((s) => s.userId)
-      .map((s) => ({
-        _id: s.userId._id,
-        name: s.userId.name,
-        email: s.userId.email,
-        phone: s.userId.phone,
-        role: s.userId.roleId.role_name,
-        courseId:s.courseId,
-        enrollmentDate: s.enrollmentDate,
-      }));
+    // Filter valid students
+    const filteredStudents = studentInfos.filter((s) => s.userId);
+
+    // Collect student IDs for attendance query
+    const studentIds = filteredStudents.map((s) => s.userId._id);
+
+    // Fetch attendance stats for all students in one go (optimized)
+    const attendanceStats = await Attendance.aggregate([
+      {
+        $match: {
+          studentId: { $in: studentIds.map((id) => new mongoose.Types.ObjectId(id)) },
+          courseId: { $in: tutorCourseIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        },
+      },
+      {
+        $group: {
+          _id: "$studentId",
+          totalDays: { $sum: 1 },
+          presentDays: {
+            $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+          attendancePercentage: {
+            $cond: [
+              { $eq: ["$totalDays", 0] },
+              0,
+              {
+                $round: [
+                  { $multiply: [{ $divide: ["$presentDays", "$totalDays"] }, 100] },
+                  2,
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    // Map attendance stats by studentId
+    const attendanceMap = {};
+    attendanceStats.forEach((a) => {
+      attendanceMap[a._id.toString()] = a.attendancePercentage;
+    });
+
+    // Build final result
+    const students = filteredStudents.map((s) => ({
+      _id: s.userId._id,
+      name: s.userId.name,
+      email: s.userId.email,
+      phone: s.userId.phone,
+      role: s.userId.roleId?.role_name || "N/A",
+      courseId: s.courseId,
+      enrollmentDate: s.enrollmentDate,
+      attendancePercentage: attendanceMap[s.userId._id.toString()] ?? 0,
+    }));
 
     const total = await Student.countDocuments({
       courseId: { $in: tutorCourseIds },
@@ -629,6 +672,7 @@ const listStudentsByTutor = async (req, res, next) => {
     next(err);
   }
 };
+
 
 // get student details by id
 const getStudentDetailsWithSubmissions = async (req, res, next) => {
