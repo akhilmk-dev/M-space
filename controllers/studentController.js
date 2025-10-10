@@ -10,6 +10,7 @@ const Tutor = require('../models/Tutor');
 const AssignmentSubmission = require('../models/AssignmentSubmission');
 const { uploadBase64ToS3 } = require('../utils/s3Uploader');
 const hasPermission = require('../helper/hasPermission');
+const Attendance = require('../models/Attendance');
 
 // Create only student (you already have)
 const createStudent = async(req, res, next)=> {
@@ -454,71 +455,78 @@ const getStudentsByCourseIdForDropdown = async (req, res, next) => {
 const getStudentsByCourseId = async (req, res, next) => {
   try {
     const { courseId } = req.params;
-    const { date, page = 1, limit = 10 } = req.query;
+    const { date, page = 1, limit = 10, search = "" } = req.query;
 
     if (!mongoose.Types.ObjectId.isValid(courseId)) {
       throw new BadRequestError("Invalid Course ID");
     }
-
     if (!date) {
       throw new BadRequestError("Date query parameter is required");
     }
 
-    // Check if course exists
+    // Check course
     const course = await Course.findById(courseId);
     if (!course) throw new NotFoundError("Course not found.");
 
-    // Pagination calculation
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    // Find students enrolled in the course with pagination
-    const students = await Student.find({ courseId })
+    // Get all students of course with populated user
+    let students = await Student.find({ courseId })
       .populate("userId", "name email phone status createdAt")
-      .skip(skip)
-      .limit(parseInt(limit))
       .lean();
 
-    const totalStudents = await Student.countDocuments({ courseId });
+    // Filter by search (after population)
+    if (search) {
+      const regex = new RegExp(search, "i"); // case-insensitive
+      students = students.filter(
+        (s) =>
+          s.userId?.name?.match(regex) ||
+          s.userId?.email?.match(regex) ||
+          s.userId?.phone?.match(regex)
+      );
+    }
 
-    // Fetch attendance for the given date
-    const studentIds = students.map((s) => s.userId?._id);
+    const totalStudents = students.length;
+
+    // Apply pagination
+    const paginatedStudents = students.slice(skip, skip + parseInt(limit));
+
+    // Get attendance for the date
+    const studentIds = paginatedStudents.map((s) => s.userId._id);
     const attendanceRecords = await Attendance.find({
       courseId,
       studentId: { $in: studentIds },
       date: new Date(date),
     }).lean();
 
-    // Map attendance by studentId
     const attendanceMap = {};
     attendanceRecords.forEach((att) => {
       attendanceMap[att.studentId.toString()] = att.present;
     });
 
-    // Prepare final result
-    const result = students.map((student) => ({
-      _id: student.userId?._id,
-      name: student.userId?.name,
-      email: student.userId?.email,
-      phone: student.userId?.phone,
-      status: student.userId?.status,
-      attendance: attendanceMap[student.userId?._id.toString()] ?? null, 
+    const result = paginatedStudents.map((student) => ({
+      _id: student.userId._id,
+      name: student.userId.name,
+      email: student.userId.email,
+      phone: student.userId.phone,
+      status: student.userId.status,
+      attendance: attendanceMap[student.userId._id.toString()] ?? null,
     }));
 
     res.status(200).json({
       message: "Students fetched successfully",
-      course: {
-        id: course._id,
-        title: course.title,
-      },
+      course: { id: course._id, title: course.title },
       page: parseInt(page),
       limit: parseInt(limit),
       total: totalStudents,
+      totalPages: Math.ceil(totalStudents / parseInt(limit)),
       students: result,
     });
   } catch (err) {
     next(err);
   }
 };
+
 
 // list students by tutor
 const listStudentsByTutor = async (req, res, next) => {
@@ -622,7 +630,6 @@ const listStudentsByTutor = async (req, res, next) => {
     next(err);
   }
 };
-
 
 // get student details by id
 const getStudentDetailsWithSubmissions = async (req, res, next) => {

@@ -69,61 +69,91 @@ exports.markAttendance = async (req, res, next) => {
 
 exports.getAttendanceReport = async (req, res) => {
     try {
-        const { courseId } = req.params;
-        const { startDate, endDate } = req.query;
-
-        if (!courseId || !startDate || !endDate) {
-            return res.status(400).json({
-                success: false,
-                message: "courseId, startDate, and endDate are required",
-            });
-        }
-
-
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        
-        const report = await Attendance.aggregate([
-          {
-            $match: {
-              courseId: new mongoose.Types.ObjectId(courseId),
-              date: { $gte: start, $lte: end },
+      const { courseId } = req.params;
+      let { startDate, endDate, page = 1, limit = 10 } = req.query;
+  
+      if (!courseId || !startDate || !endDate) {
+        return res.status(400).json({
+          success: false,
+          message: "courseId, startDate, and endDate are required",
+        });
+      }
+  
+      page = parseInt(page);
+      limit = parseInt(limit);
+      const skip = (page - 1) * limit;
+  
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+  
+      // Total count of students in the report
+      const totalCountResult = await Attendance.aggregate([
+        {
+          $match: {
+            courseId: new mongoose.Types.ObjectId(courseId),
+            date: { $gte: start, $lte: end },
+          },
+        },
+        {
+          $group: { _id: "$studentId" },
+        },
+        { $count: "total" },
+      ]);
+      const total = totalCountResult[0]?.total || 0;
+  
+      const report = await Attendance.aggregate([
+        {
+          $match: {
+            courseId: new mongoose.Types.ObjectId(courseId),
+            date: { $gte: start, $lte: end },
+          },
+        },
+        {
+          $group: {
+            _id: "$studentId",
+            totalDays: { $sum: 1 },
+            presentDays: { $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] } },
+          },
+        },
+        {
+          $lookup: {
+            from: "users", // your students collection
+            localField: "_id",
+            foreignField: "_id",
+            as: "student",
+          },
+        },
+        { $unwind: "$student" },
+        {
+          $project: {
+            _id: 0,
+            studentId: "$_id",
+            studentName: "$student.name",
+            totalDays: 1,
+            presentDays: 1,
+            attendancePercentage: {
+              $round: [
+                { $multiply: [{ $divide: ["$presentDays", "$totalDays"] }, 100] },
+                2,
+              ],
             },
           },
-          {
-            $group: {
-              _id: "$studentId",
-              totalDays: { $sum: 1 },
-              presentDays: { $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] } },
-            },
-          },
-          {
-            $lookup: {
-              from: "users", // change to your students collection
-              localField: "_id",
-              foreignField: "_id",
-              as: "student",
-            },
-          },
-          { $unwind: "$student" },
-          {
-            $project: {
-              _id: 0,
-              studentId: "$_id",
-              studentName: "$student.name",
-              totalDays: 1,
-              presentDays: 1,
-              attendancePercentage: {
-                $round: [{ $multiply: [{ $divide: ["$presentDays", "$totalDays"] }, 100] }, 2],
-              },
-            },
-          },
-          { $sort: { studentName: 1 } },
-        ]);
-
-        res.json({ success: true, report });
+        },
+        { $sort: { studentName: 1 } },
+        { $skip: skip },
+        { $limit: limit },
+      ]);
+  
+      res.json({
+        success: true,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        report,
+      });
     } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
+      res.status(500).json({ success: false, message: error.message });
     }
-};
+  };
