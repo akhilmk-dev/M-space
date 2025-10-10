@@ -5,7 +5,6 @@ const { lessonValidationSchema } = require('../validations/lessonValidation');
 const { updateLessonBodySchema } = require('../validations/updateLesson');
 const { authenticate } = require('../middleware/authMiddleware');
 const router = express.Router();
-
 router.get('/',authenticate,getAllLessons);
 router.post('/',authenticate,validateMiddleware(lessonValidationSchema),createLessons);
 router.put('/:lessonId',authenticate,validateMiddleware(updateLessonBodySchema),updateSingleLesson);

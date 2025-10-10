@@ -11,6 +11,7 @@ const Tutor = require('../models/Tutor');
 const LessonCompletion = require('../models/LessonCompletion');
 const hasPermission = require('../helper/hasPermission');
 const catchAsync = require('../utils/catchAsync');
+const checkDependencies = require('../helper/checkDependencies');
 
 exports.createLessons = async (req, res) => {
   try {
