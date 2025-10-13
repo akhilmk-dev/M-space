@@ -21,7 +21,7 @@ const createStudent = async(req, res, next)=> {
     if (!isPermission ) {
       throw new ForbiddenError("User Doesn't have permission to create student")
     }
-    const { name, email, phone, password, courseId, profile_image, status } = req.body;
+    const { name, email, phone, password, courseId, profile_image, status,mode } = req.body;
     if (!name || !email || !phone || !password || !courseId) {
       throw new BadRequestError("All fields are required");
     }
@@ -68,7 +68,7 @@ const createStudent = async(req, res, next)=> {
         phone,
         passwordHash,
         roleId: studentRole._id,
-        status: true
+        status: true,
       }],
       { session }
     );
@@ -81,7 +81,8 @@ const createStudent = async(req, res, next)=> {
         courseId,
         enrollmentDate: new Date(),
         profile_image: profileImageUrl,
-        status: status 
+        status: status,
+        mode:mode
       }],
       { session }
     );
@@ -208,7 +209,7 @@ async function updateStudent(req, res, next) {
       throw new ForbiddenError("User Doesn't have permission to edit student")
     }
     const { studentId } = req.params; // ID of student user
-    const { name, email, phone, courseId, profile_image,status=true } = req.body;
+    const { name, email, phone, courseId, profile_image,status=true,mode } = req.body;
 
     // Validate student ID
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
@@ -279,6 +280,7 @@ async function updateStudent(req, res, next) {
 
       if (courseId) studentInfo.courseId = courseId;
       studentInfo.status = status;
+      studentInfor.mode = mode;
       await studentInfo.save({ session });
     }
 
@@ -949,6 +951,7 @@ const studentHome = async (req, res, next) => {
     next(err);
   }
 };
+
 const studentPerformance = async (req, res, next) => {
   try {
     const studentId = req.user?.id;

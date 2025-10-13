@@ -316,7 +316,146 @@ exports.generateAttendanceReportPdf = async (req, res) => {
     }
   };
   
+exports.getAllAttendance = async (req, res, next) => {
+    try {
+      let {
+        courseId,
+        startDate,
+        endDate,
+        search = "",
+        sortBy = "studentName",
+        sortOrder = "asc",
+        page = 1,
+        limit = 10,
+      } = req.query;
   
+      page = parseInt(page);
+      limit = parseInt(limit);
+      const skip = (page - 1) * limit;
+  
+      // Validate dates
+      const dateFilter = {};
+      if (startDate && endDate) {
+        dateFilter.date = {
+          $gte: new Date(startDate),
+          $lte: new Date(new Date(endDate).setHours(23, 59, 59, 999)),
+        };
+      }
+  
+      // Build match stage
+      const matchStage = {};
+      if (courseId && mongoose.Types.ObjectId.isValid(courseId)) {
+        matchStage.courseId = new mongoose.Types.ObjectId(courseId);
+      }
+      if (Object.keys(dateFilter).length > 0) {
+        matchStage.date = dateFilter.date;
+      }
+  
+      // Base pipeline
+      const pipeline = [
+        { $match: matchStage },
+        {
+          $group: {
+            _id: "$studentId",
+            totalDays: { $sum: 1 },
+            presentDays: {
+              $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] },
+            },
+          },
+        },
+        {
+          $lookup: {
+            from: "users",
+            localField: "_id",
+            foreignField: "_id",
+            as: "student",
+          },
+        },
+        { $unwind: "$student" },
+        {
+          $project: {
+            _id: 0,
+            studentId: "$_id",
+            studentName: "$student.name",
+            studentEmail: "$student.email",
+            totalDays: 1,
+            presentDays: 1,
+            attendancePercentage: {
+              $cond: [
+                { $eq: ["$totalDays", 0] },
+                0,
+                {
+                  $round: [
+                    {
+                      $multiply: [
+                        { $divide: ["$presentDays", "$totalDays"] },
+                        100,
+                      ],
+                    },
+                    2,
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ];
+  
+      // Search filter
+      if (search) {
+        pipeline.push({
+          $match: {
+            studentName: { $regex: search, $options: "i" },
+          },
+        });
+      }
+  
+      // Count total before pagination
+      const totalResults = await Attendance.aggregate([...pipeline, { $count: "total" }]);
+      const total = totalResults[0]?.total || 0;
+  
+      // Sorting
+      const sortStage = {};
+      sortStage[sortBy] = sortOrder === "desc" ? -1 : 1;
+      pipeline.push({ $sort: sortStage });
+  
+      // Pagination
+      pipeline.push({ $skip: skip });
+      pipeline.push({ $limit: limit });
+  
+      // Run query
+      const report = await Attendance.aggregate(pipeline);
+  
+      // Include course name
+      let courseName = null;
+      if (courseId) {
+        const course = await Course.findById(courseId).select("title");
+        courseName = course?.title || null;
+      }
+  
+      res.status(200).json({
+        success: true,
+        filters: {
+          courseId,
+          startDate,
+          endDate,
+          search,
+          sortBy,
+          sortOrder,
+        },
+        pagination: {
+          total,
+          totalPages: Math.ceil(total / limit),
+          currentPage: page,
+          limit,
+        },
+        courseName,
+        report,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
   
   
   
