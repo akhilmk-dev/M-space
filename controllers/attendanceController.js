@@ -335,7 +335,7 @@ exports.getAllAttendance = async (req, res, next) => {
 
     // Sorting
     let sortField = "createdAt";
-    let sortOrder = -1; // default: descending
+    let sortOrder = -1; 
     if (req.query.sortBy) {
       const [field, order] = req.query.sortBy.split(":");
       sortField = field || "createdAt";
@@ -436,7 +436,7 @@ exports.getAllAttendance = async (req, res, next) => {
 
     // Run aggregation
     const report = await Attendance.aggregate(pipeline);
-
+    
     // Optional course name
     let courseName = null;
     if (courseId) {

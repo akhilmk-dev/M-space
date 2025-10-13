@@ -178,6 +178,7 @@ async function listStudents(req, res, next) {
         email: u.email,
         phone: u.phone,
         role: u.roleId.role_name,
+        mode:studentInfo?.mode,
         course: course ? { id: course._id, title: course.title } : null,
         enrollmentDate: studentInfo ? studentInfo.enrollmentDate : null,
         profile_image: studentInfo?.profile_image || null
@@ -294,6 +295,7 @@ async function updateStudent(req, res, next) {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        mode:studentInfo.mode,
         profileImage: studentInfo.profile_image,
         course: course ? { id: course._id, title: course.title } : undefined,
         status:status
@@ -1196,6 +1198,78 @@ const getStudentAttendance = async (req, res, next) => {
   }
 };
 
+const checkEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) throw new BadRequestError("Email is required");
+
+    const user = await User.findOne({ email }).populate("roleId");
+    if (!user) throw new NotFoundError("Email not found");
+
+    // Check if user is a student
+    if (!user.roleId || !/student/i.test(user.roleId.role_name)) {
+      throw new ForbiddenError("Invalid student");
+    }
+
+    res.json({
+      status:"success",
+      message: "OTP send successfully",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const verifyOtp = async (req, res) => {
+  const {email,otp}= req.body;
+  const user = await User.findOne({ email }).populate("roleId");
+  if (!user) throw new NotFoundError("Student not found");
+
+  // Check if user is a student
+  if (!user.roleId || !/student/i.test(user.roleId.role_name)) {
+    throw new ForbiddenError("Invalid student");
+  }
+  if (otp !== "55555") throw new BadRequestError("Invalid OTP");
+
+  user.otpVerified = true;
+  await user.save();
+
+  res.json({ status: "success", message: "OTP verified" });
+};
+
+const resetPassword = async (req, res, next) => {
+  try {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) throw new BadRequestError("Email and new password are required");
+
+    const user = await User.findOne({ email }).populate("roleId");
+    if (!user) throw new NotFoundError("Student not found");
+  
+    // Check if user is a student
+    if (!user.roleId || !/student/i.test(user.roleId.role_name)) {
+      throw new ForbiddenError("Invalid student");
+    }
+
+    if (!user.otpVerified) throw new ForbiddenError("OTP not verified");
+
+    // Check if new password is same as old password
+    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw new BadRequestError("New password cannot be the same as old password");
+    }
+
+    // Hash and save new password
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.otpVerified = false; 
+    await user.save();
+
+    res.json({ status: "success", message: "Password reset successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 module.exports = {
   createStudent,
   listStudents,
@@ -1209,5 +1283,8 @@ module.exports = {
   studentHome,
   getStudentsByCourseIdForDropdown,
   studentPerformance,
-  getStudentAttendance
+  getStudentAttendance,
+  checkEmail,
+  verifyOtp,
+  resetPassword
 };

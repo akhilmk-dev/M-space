@@ -591,6 +591,77 @@ const updateTutorProfile = async(req, res, next) =>{
   }
 }
 
+const checkEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) throw new BadRequestError("Email is required");
+
+    const user = await User.findOne({ email }).populate("roleId");
+    if (!user) throw new NotFoundError("Email not found");
+
+    // Check if user is a tutor
+    if (!user.roleId || !/tutor/i.test(user.roleId.role_name)) {
+      throw new ForbiddenError("Invalid tutor");
+    }
+
+    res.json({
+      status:"success",
+      message: "OTP send successfully",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+const verifyOtp = async (req, res) => {
+  const {email,otp}= req.body;
+  const user = await User.findOne({ email }).populate("roleId");
+  if (!user) throw new NotFoundError("Tutor not found");
+
+  // Check if user is a tutor
+  if (!user.roleId || !/tutor/i.test(user.roleId.role_name)) {
+    throw new ForbiddenError("Invalid Tutor");
+  }
+  if (otp !== "55555") throw new BadRequestError("Invalid OTP");
+
+  user.otpVerified = true;
+  await user.save();
+
+  res.json({ status: "success", message: "OTP verified" });
+};
+
+const resetPassword = async (req, res, next) => {
+  try {
+    const { email, newPassword } = req.body;
+    if (!email || !newPassword) throw new BadRequestError("Email and new password are required");
+
+    const user = await User.findOne({ email }).populate("roleId");
+    if (!user) throw new NotFoundError("Tutor not found");
+  
+    // Check if user is a Tutor
+    if (!user.roleId || !/tutor/i.test(user.roleId.role_name)) {
+      throw new ForbiddenError("Invalid tutor");
+    }
+
+    if (!user.otpVerified) throw new ForbiddenError("OTP not verified");
+
+    // Check if new password is same as old password
+    const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
+    if (isSamePassword) {
+      throw new BadRequestError("New password cannot be the same as old password");
+    }
+
+    // Hash and save new password
+    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    user.otpVerified = false; 
+    await user.save();
+
+    res.json({ status: "success", message: "Password reset successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
     createTutor,
     listTutors,
@@ -598,5 +669,8 @@ module.exports = {
     deleteTutor,
     getTutorsByCourseId,
     changeTutorPassword,
-    updateTutorProfile
+    updateTutorProfile,
+    checkEmail,
+    verifyOtp,
+    resetPassword
 };

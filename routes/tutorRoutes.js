@@ -24,6 +24,15 @@ router.get("/course/:courseId",authenticate, tutorController.getTutorsByCourseId
 router.post('/change-password',authenticate,tutorController.changeTutorPassword);
 
 // tutor profile update
-router.post('/profile',authenticate,validateMiddleware(updateTutorSchema),tutorController.updateTutorProfile)
+router.post('/profile',authenticate,validateMiddleware(updateTutorSchema),tutorController.updateTutorProfile);
+
+// check email
+router.post('/check-email',tutorController.checkEmail);
+
+// verify otp
+router.post('/verify-otp',tutorController.verifyOtp)
+
+// reset password
+router.post('/reset-password',tutorController.resetPassword)
 
 module.exports = router;
