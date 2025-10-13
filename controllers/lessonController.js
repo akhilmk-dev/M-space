@@ -13,47 +13,57 @@ const hasPermission = require('../helper/hasPermission');
 const catchAsync = require('../utils/catchAsync');
 const checkDependencies = require('../helper/checkDependencies');
 
-exports.createLessons = async (req, res) => {
+exports.createLessons = async (req, res, next) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
   try {
     const isPermission = await hasPermission(req.user?.id, "Add Lesson");
-    if (!isPermission ) {
-      throw new ForbiddenError("User Doesn't have permission to create lesson")
+    if (!isPermission) {
+      throw new ForbiddenError("User Doesn't have permission to create lesson");
     }
+
     const { courseId, moduleId, chapterId, lessons } = req.body;
 
-    // Check if Course exists
-    const course = await Course.findById(courseId);
-    if (!course) {
-      return res.status(400).json({ success: false, message: "Invalid Course ID" });
+    // Check Course, Module, Chapter
+    const course = await Course.findById(courseId).session(session);
+    if (!course) throw new Error("Invalid Course ID");
+
+    const module = await Module.findOne({ _id: moduleId, courseId }).session(session);
+    if (!module) throw new Error("Invalid Module ID");
+
+    const chapter = await Chapter.findOne({ _id: chapterId, moduleId }).session(session);
+    if (!chapter) throw new Error("Invalid Chapter ID");
+
+    // Insert lessons
+    const lessonDocs = lessons.map((lesson) => ({ ...lesson, chapterId }));
+    const savedLessons = await Lesson.insertMany(lessonDocs, { session });
+
+    // Get students in the course
+    const students = await Student.find({ courseId }).select("userId").session(session).lean();
+    const studentIds = students.map(s => s.userId.toString());
+
+    // Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    // After commit, send notifications
+    const lessonTitles = lessons.map(l => l.title).join(", ");
+    const notificationMessage = `New lesson(s) added: ${lessonTitles}`;
+
+    for (const userId of studentIds) {
+      sendNotificationToUser(userId, "New Lessons Added", notificationMessage);
     }
-
-    // Check if Module exists & belongs to the course
-    const module = await Module.findOne({ _id: moduleId, courseId });
-    if (!module) {
-      return res.status(400).json({ success: false, message: "Invalid Module ID" });
-    }
-
-    // Check if Chapter exists & belongs to the module
-    const chapter = await Chapter.findOne({ _id: chapterId, moduleId });
-    if (!chapter) {
-      return res.status(400).json({ success: false, message: "Invalid Chapter ID" });
-    }
-
-    //  Add multiple lessons
-    const lessonDocs = lessons.map((lesson) => ({
-      ...lesson,
-      chapterId,
-    }));
-
-    const savedLessons = await Lesson.insertMany(lessonDocs);
 
     return res.status(201).json({
       success: true,
-      message: "Lessons added successfully",
+      message: "Lessons added successfully and notifications sent",
       data: savedLessons,
     });
   } catch (err) {
-    console.error("Error adding lessons:", err);
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Error creating lessons:", err);
     return res.status(500).json({
       success: false,
       message: "Internal server error",

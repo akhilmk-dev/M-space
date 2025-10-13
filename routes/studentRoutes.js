@@ -42,7 +42,7 @@ router.get('/home',authenticate,studentHome)
 router.get('/performance',authenticate,studentPerformance)
 
 // my attendance
-router.post('/my-attendance',authenticate,getStudentAttendance);
+router.get('/my-attendance',authenticate,getStudentAttendance);
 
 // check email
 router.post('/check-email',checkEmail);
