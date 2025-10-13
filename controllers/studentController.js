@@ -280,7 +280,7 @@ async function updateStudent(req, res, next) {
 
       if (courseId) studentInfo.courseId = courseId;
       studentInfo.status = status;
-      studentInfor.mode = mode;
+      studentInfo.mode = mode;
       await studentInfo.save({ session });
     }
 
