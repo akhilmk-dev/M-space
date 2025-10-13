@@ -1,5 +1,5 @@
 const express = require('express');
-const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId, listStudentsByTutor, getStudentDetailsWithSubmissions, changeStudentPassword, updateStudentProfile, getStudentsByCourseIdForDropdown, studentHome } = require('../controllers/studentController');
+const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId, listStudentsByTutor, getStudentDetailsWithSubmissions, changeStudentPassword, updateStudentProfile, getStudentsByCourseIdForDropdown, studentHome, studentPerformance, getStudentAttendance } = require('../controllers/studentController');
 const { authenticate } = require('../middleware/authMiddleware');
 const { addStudentSchema, updateStudentSchema } = require('../validations/studentValidation');
 const validateMiddleware = require('../utils/validate');
@@ -37,5 +37,11 @@ router.post('/profile',authenticate,validateMiddleware(updateStudentSchema),upda
 
 // student home
 router.get('/home',authenticate,studentHome)
+
+//student performance 
+router.get('/performance',authenticate,studentPerformance)
+
+// my attendance
+router.get('/my-attendance',authenticate,getStudentAttendance)
 
 module.exports = router;

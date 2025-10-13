@@ -24,17 +24,24 @@ export const addStudentSchema = Joi.object({
   courseId: Joi.string().required().messages({
     "string.empty": "Course is required",
   }),
-  roleId:Joi.string(),
+  roleId: Joi.string(),
+  mode: Joi.string()
+    .valid("part time", "full time")
+    .required()
+    .messages({
+      "any.only": "Mode must be either 'part time' or 'full time'",
+      "string.empty": "Mode is required",
+    }),
   profile_image: Joi.string()
-    .allow(null) 
+    .allow(null)
     .optional()
     .custom((value, helpers) => {
       const regex = /^data:image\/(png|jpeg|jpg|gif);base64,[A-Za-z0-9+/=]+$/;
       if (!regex.test(value)) {
-        return helpers.message('profile_image must be a valid base64 image string');
+        return helpers.message("profile_image must be a valid base64 image string");
       }
       return value;
-  }),
+    }),
 });
 
 // Update Student (password optional)
@@ -53,10 +60,17 @@ export const updateStudentSchema = Joi.object({
     .messages({
       "string.empty": "Phone number is required",
       "string.pattern.base": "Phone number must be exactly 10 digits",
-  }),
+    }),
   courseId: Joi.string().required().messages({
     "string.empty": "Course is required",
   }),
-  roleId:Joi.string(),
-  profile_image: Joi.string().optional().allow(null)
+  roleId: Joi.string(),
+  mode: Joi.string()
+    .valid("part time", "full time")
+    .required()
+    .messages({
+      "any.only": "Mode must be either 'part time' or 'full time'",
+      "string.empty": "Mode is required",
+    }),
+  profile_image: Joi.string().optional().allow(null),
 });

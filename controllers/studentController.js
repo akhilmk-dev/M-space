@@ -863,19 +863,30 @@ const  updateStudentProfile = async(req, res, next)=> {
 
 const studentHome = async (req, res, next) => {
   try {
-    const studentId = req.user?.id; 
+    const studentId = req.user?.id;
+
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
-      return res.status(400).json({ success: false, message: "Invalid student ID" });
+      throw new BadRequestError("Invalid student ID");
     }
-    // Get student enrollment info
-    const student = await Student.findOne({ userId: studentId }).lean();
-    if (!student) return res.status(404).json({ success: false, message: "Student not found" });
 
-    const courseId = student.courseId;
+    // Get student details
+    const student = await Student.findOne({ userId: studentId })
+      .populate("courseId", "courseName duration")
+      .populate("userId", "name email phone")
+      .lean();
 
-    // Calculate attendance
+    if (!student) throw new NotFoundError("Student not found");
+
+    const courseId = student.courseId?._id;
+
+    // ---------- ATTENDANCE PERCENTAGE ----------
     const attendanceStats = await Attendance.aggregate([
-      { $match: { studentId: new mongoose.Types.ObjectId(studentId), courseId: new mongoose.Types.ObjectId(courseId) } },
+      {
+        $match: {
+          studentId: new mongoose.Types.ObjectId(studentId),
+          ...(courseId && { courseId: new mongoose.Types.ObjectId(courseId) }),
+        },
+      },
       {
         $group: {
           _id: "$studentId",
@@ -890,7 +901,17 @@ const studentHome = async (req, res, next) => {
             $cond: [
               { $eq: ["$totalDays", 0] },
               0,
-              { $round: [{ $multiply: [{ $divide: ["$presentDays", "$totalDays"] }, 100] }, 2] },
+              {
+                $round: [
+                  {
+                    $multiply: [
+                      { $divide: ["$presentDays", "$totalDays"] },
+                      100,
+                    ],
+                  },
+                  2,
+                ],
+              },
             ],
           },
         },
@@ -898,19 +919,152 @@ const studentHome = async (req, res, next) => {
     ]);
 
     const attendancePercentage = attendanceStats[0]?.attendancePercentage ?? 0;
-    // Pending assignments count
+
+    // ---------- PENDING ASSIGNMENTS ----------
     const pendingAssignmentsCount = await AssignmentSubmission.countDocuments({
       studentId: new mongoose.Types.ObjectId(studentId),
-      status: { $ne: "Submitted" }, 
+      status: { $in: ["pending", "submitted"] }, // not reviewed yet
     });
 
+    // ---------- RESPONSE ----------
+    res.status(200).json({
+      success: true,
+      data: {
+        studentDetails: {
+          id: student._id,
+          name: student.userId?.name,
+          email: student.userId?.email,
+          phone: student.userId?.phone,
+          course: student.courseId?.courseName,
+          courseDuration: student.courseId?.duration,
+          profile_image:student?.profile_image || null
+        },
+        stats: {
+          attendancePercentage,
+          pendingAssignmentsCount,
+        },
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+const studentPerformance = async (req, res, next) => {
+  try {
+    const studentId = req.user?.id;
+    const { page = 1, limit = 10 } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      throw new BadRequestError("Invalid student ID");
+    }
+
+    // Find Student
+    const student = await Student.findOne({ userId: studentId }).lean();
+    if (!student) throw new NotFoundError("Student not found");
+
+    const courseId = student.courseId;
+
+    // ---------- ATTENDANCE PERCENTAGE ----------
+    const attendanceStats = await Attendance.aggregate([
+      {
+        $match: {
+          studentId: new mongoose.Types.ObjectId(studentId),
+          courseId: new mongoose.Types.ObjectId(courseId),
+        },
+      },
+      {
+        $group: {
+          _id: "$studentId",
+          totalDays: { $sum: 1 },
+          presentDays: { $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] } },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          attendancePercentage: {
+            $cond: [
+              { $eq: ["$totalDays", 0] },
+              0,
+              {
+                $round: [
+                  {
+                    $multiply: [
+                      { $divide: ["$presentDays", "$totalDays"] },
+                      100,
+                    ],
+                  },
+                  2,
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const attendancePercentage = attendanceStats[0]?.attendancePercentage ?? 0;
+
+    // ---------- ASSIGNMENT PERFORMANCE ----------
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const totalAssignments = await AssignmentSubmission.countDocuments({
+      studentId: new mongoose.Types.ObjectId(studentId),
+    });
+
+    const assignments = await AssignmentSubmission.find({
+      studentId: new mongoose.Types.ObjectId(studentId),
+    })
+      .populate("assignmentId", "title totalMarks")
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // Format assignment data
+    const formattedAssignments = assignments.map((a) => {
+      const totalMarks = a.assignmentId?.totalMarks || 0;
+      const obtained = a.marks ?? 0;
+      const percentage = totalMarks
+        ? Math.round((obtained / totalMarks) * 100)
+        : 0;
+      return {
+        assignmentId: a.assignmentId?._id,
+        title: a.assignmentId?.title || "Untitled",
+        marks: obtained,
+        totalMarks,
+        percentage,
+        status: a.status,
+        submittedAt: a.submittedAt,
+        reviewedAt: a.reviewedAt,
+        comment: a.comment || "",
+      };
+    });
+
+    // ---------- AVERAGE MARKS ----------
+    const gradedAssignments = formattedAssignments.filter(
+      (a) => a.totalMarks > 0 && a.marks !== null
+    );
+    const averageMarksPercentage =
+      gradedAssignments.length > 0
+        ? Math.round(
+            gradedAssignments.reduce((sum, a) => sum + a.percentage, 0) /
+              gradedAssignments.length
+          )
+        : 0;
+
+    // ---------- RESPONSE ----------
     res.status(200).json({
       success: true,
       data: {
         studentId,
         courseId,
         attendancePercentage,
-        pendingAssignmentsCount,
+        averageMarksPercentage,
+        totalAssignments,
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalAssignments / limit),
+        assignments: formattedAssignments,
       },
     });
   } catch (err) {
@@ -918,6 +1072,126 @@ const studentHome = async (req, res, next) => {
   }
 };
 
+const getStudentAttendance = async (req, res, next) => {
+  try {
+    const studentId = req.user?.id;
+    const { page = 1, limit = 10, month, year } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      throw new BadRequestError("Invalid student ID");
+    }
+
+    const student = await Student.findOne({ userId: studentId }).lean();
+    if (!student) throw new NotFoundError("Student not found");
+
+    const courseId = student.courseId;
+
+    // ---------- BUILD FILTER ----------
+    const filter = {
+      studentId: new mongoose.Types.ObjectId(studentId),
+      courseId: new mongoose.Types.ObjectId(courseId),
+    };
+
+    // Month and Year Filter
+    if (year && isNaN(year)) throw new BadRequestError("Invalid year format");
+    if (month && (isNaN(month) || month < 1 || month > 12))
+      throw new BadRequestError("Invalid month format");
+
+    if (year) {
+      const selectedYear = parseInt(year);
+      let startDate = new Date(selectedYear, 0, 1); 
+      let endDate = new Date(selectedYear + 1, 0, 1); 
+
+      if (month) {
+        const selectedMonth = parseInt(month) - 1; 
+        startDate = new Date(selectedYear, selectedMonth, 1);
+        endDate = new Date(selectedYear, selectedMonth + 1, 1);
+      }
+
+      filter.date = { $gte: startDate, $lt: endDate };
+    }
+
+    // ---------- PAGINATION ----------
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    const totalRecords = await Attendance.countDocuments(filter);
+
+    const attendanceRecords = await Attendance.find(filter)
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean();
+
+    // ---------- SUMMARY ----------
+    const totalDays = totalRecords;
+    const presentDays = attendanceRecords.filter((a) => a.present).length;
+
+    const attendanceStats = await Attendance.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: "$studentId",
+          totalDays: { $sum: 1 },
+          presentDays: {
+            $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] },
+          },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          totalDays: 1,
+          presentDays: 1,
+          attendancePercentage: {
+            $cond: [
+              { $eq: ["$totalDays", 0] },
+              0,
+              {
+                $round: [
+                  {
+                    $multiply: [
+                      { $divide: ["$presentDays", "$totalDays"] },
+                      100,
+                    ],
+                  },
+                  2,
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const summary = attendanceStats[0] || {
+      totalDays: 0,
+      presentDays: 0,
+      attendancePercentage: 0,
+    };
+
+    // ---------- RESPONSE ----------
+    res.status(200).json({
+      success: true,
+      data: {
+        studentId,
+        courseId,
+        summary,
+        totalRecords,
+        currentPage: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(totalRecords / limit),
+        attendanceRecords: attendanceRecords.map((a) => ({
+          id: a._id,
+          date: a.date,
+          present: a.present,
+          createdAt: a.createdAt,
+        })),
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
 
 module.exports = {
   createStudent,
@@ -930,5 +1204,7 @@ module.exports = {
   changeStudentPassword,
   updateStudentProfile,
   studentHome,
-  getStudentsByCourseIdForDropdown
+  getStudentsByCourseIdForDropdown,
+  studentPerformance,
+  getStudentAttendance
 };

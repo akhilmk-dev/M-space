@@ -14,6 +14,10 @@ const StudentSchema = new mongoose.Schema({
   status:{
     type:Boolean,
     default: true
+  },
+  mode: {
+    type: String,
+    required: [true,"mode is required"]
   }
 });
 

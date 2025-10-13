@@ -15,6 +15,7 @@ const AssignmentSchema = new mongoose.Schema({
   assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   status: { type: String, enum: ['Active', 'published'], default: 'draft' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  totalMarks: {type:Number,default:100}
 }, { timestamps: true });
 
 module.exports = mongoose.model("Assignment", AssignmentSchema);
