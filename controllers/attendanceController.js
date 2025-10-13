@@ -429,14 +429,19 @@ exports.getAllAttendance = async (req, res, next) => {
         },
       },
       { $unwind: "$student" },
-      { $match: { studentName: { $regex: searchRegex } } },
+      {
+        $match: {
+          "student.name": { $regex: searchRegex },
+        },
+      },
       { $count: "total" },
     ]);
+    
     const total = totalResults[0]?.total || 0;
 
     // Run aggregation
     const report = await Attendance.aggregate(pipeline);
-    
+
     // Optional course name
     let courseName = null;
     if (courseId) {

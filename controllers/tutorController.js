@@ -747,7 +747,6 @@ const tutorHome = async (req, res, next) => {
           },
         },
       ]);
-
       avgAttendancePercentage = attendanceStats[0]?.avgPercentage?.toFixed(2) || 0;
     }
 
