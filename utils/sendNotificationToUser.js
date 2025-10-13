@@ -41,3 +41,7 @@ async function sendNotificationToUser(userId, title, message, url = "", extraDat
     console.error("Error sending notification:", error.response?.data || error.message);
   }
 }
+
+module.exports = {
+    sendNotificationToUser
+}

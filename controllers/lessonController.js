@@ -12,6 +12,7 @@ const LessonCompletion = require('../models/LessonCompletion');
 const hasPermission = require('../helper/hasPermission');
 const catchAsync = require('../utils/catchAsync');
 const checkDependencies = require('../helper/checkDependencies');
+const { sendNotificationToUser } = require('../utils/sendNotificationToUser');
 
 exports.createLessons = async (req, res, next) => {
   const session = await mongoose.startSession();
