@@ -14,6 +14,10 @@ const {
 const checkDependencies = require("../helper/checkDependencies");
 const { uploadBase64ToS3 } = require("../utils/s3Uploader");
 const hasPermission = require("../helper/hasPermission");
+const Assignment = require("../models/Assignment");
+const AssignmentSubmission = require("../models/AssignmentSubmission");
+const Student = require("../models/Student");
+const Attendance = require("../models/Attendance");
 
 // Create tutor
 async function createTutor(req, res, next) {
@@ -662,6 +666,118 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+const tutorHome = async (req, res, next) => {
+  try {
+    const tutorId = req.user?.id;
+
+    if (!mongoose.Types.ObjectId.isValid(tutorId)) {
+      throw new BadRequestError("Invalid tutor ID");
+    }
+
+    // === Fetch tutor record ===
+    const tutor = await Tutor.findOne({ userId: tutorId })
+      .populate("userId", "name email phone")
+      .lean();
+
+    if (!tutor) throw new NotFoundError("Tutor not found");
+
+    const courseIds = tutor.courseIds || [];
+
+    // === Fetch first five courses ===
+    const courses = await Course.find({ _id: { $in: courseIds } })
+      .select("_id title description")
+      .limit(5)
+      .lean();
+
+    // === Assignments reviewed today ===
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const tutorAssignments = await Assignment.find({ createdBy: tutorId }).select("_id");
+    const assignmentIds = tutorAssignments.map((a) => a._id);
+
+    const reviewedTodayCount = await AssignmentSubmission.countDocuments({
+      assignmentId: { $in: assignmentIds },
+      reviewedAt: { $gte: startOfDay, $lte: endOfDay },
+    });
+
+    // === Average attendance percentage of students in tutor’s courses ===
+    const studentsInCourses = await Student.find({
+      courseId: { $in: courseIds },
+    }).select("userId courseId");
+
+    const studentIds = studentsInCourses.map((s) => s.userId);
+
+    let avgAttendancePercentage = 0;
+
+    if (studentIds.length > 0) {
+      const attendanceStats = await Attendance.aggregate([
+        {
+          $match: {
+            studentId: { $in: studentIds.map((id) => new mongoose.Types.ObjectId(id)) },
+            courseId: { $in: courseIds.map((id) => new mongoose.Types.ObjectId(id)) },
+          },
+        },
+        {
+          $group: {
+            _id: "$studentId",
+            totalDays: { $sum: 1 },
+            presentDays: {
+              $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] },
+            },
+          },
+        },
+        {
+          $project: {
+            percentage: {
+              $cond: [
+                { $eq: ["$totalDays", 0] },
+                0,
+                { $multiply: [{ $divide: ["$presentDays", "$totalDays"] }, 100] },
+              ],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            avgPercentage: { $avg: "$percentage" },
+          },
+        },
+      ]);
+
+      avgAttendancePercentage = attendanceStats[0]?.avgPercentage?.toFixed(2) || 0;
+    }
+
+    // === Active students count ===
+    const activeStudentsCount = await User.countDocuments({
+      _id: { $in: studentIds },
+      status: true,
+    });
+
+    // === Response ===
+    res.status(200).json({
+      status: "success",
+      data: {
+        profile_image: tutor?.profile_image,
+        name: tutor?.userId?.name,
+        email: tutor?.userId?.email,
+        phone: tutor?.userId?.phone,
+        tutorId,
+        reviewedTodayCount,
+        avgAttendancePercentage: Number(avgAttendancePercentage),
+        activeStudentsCount,
+        courses, 
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+
 module.exports = {
     createTutor,
     listTutors,
@@ -672,5 +788,6 @@ module.exports = {
     updateTutorProfile,
     checkEmail,
     verifyOtp,
-    resetPassword
+    resetPassword,
+    tutorHome
 };

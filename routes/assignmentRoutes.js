@@ -11,7 +11,7 @@ router.get('/',authenticate, getAllAssignments);
 router.get('/createdBy/:id',authenticate,getAssignmentsByCreatedBy)
 router.get('/:id',authenticate,getAssignmentById );
 router.delete('/:assignmentId',authenticate,deleteAssignment);
-router.put('/:assignmentId',authenticate,updateAssignment)
+router.put('/:assignmentId',authenticate,updateAssignment);
 
 
 module.exports = router;

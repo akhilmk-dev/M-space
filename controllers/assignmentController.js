@@ -147,24 +147,96 @@ const createAssignment = async (req, res, next) => {
 
 const getAllAssignments = async (req, res, next) => {
   try {
-    const { courseId, lessonId } = req.query;
+    let {
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt:desc",
+      search = "",
+      courseId,
+      createdBy, 
+    } = req.query;
 
+    // Pagination setup
+    page = parseInt(page);
+    limit = parseInt(limit);
+    const skip = (page - 1) * limit;
+
+    // Sort parsing (attendance-style)
+    let [sortField, sortOrder] = sortBy.split(":");
+    sortField = sortField || "createdAt";
+    sortOrder = sortOrder === "asc" ? 1 : -1;
+
+    // === Filter setup ===
     const filter = {};
-    if (courseId) filter.courseId = courseId;
-    if (lessonId) filter.lessonId = lessonId;
 
-    const assignments = await Assignment.find(filter)
-      .populate("createdBy", "name email")
-      .sort({ createdAt: -1 }).select('-assignedTo -files');
+    // Filter by course
+    if (courseId && mongoose.Types.ObjectId.isValid(courseId)) {
+      filter.courseId = new mongoose.Types.ObjectId(courseId);
+    }
+
+    // Filter by createdBy (either ObjectId or string search)
+    if (createdBy) {
+      if (mongoose.Types.ObjectId.isValid(createdBy)) {
+        // Direct ObjectId match
+        filter.createdBy = new mongoose.Types.ObjectId(createdBy);
+      } else {
+        // Search by user name or email
+        const matchingUsers = await User.find({
+          $or: [
+            { name: { $regex: createdBy, $options: "i" } },
+            { email: { $regex: createdBy, $options: "i" } },
+          ],
+        }).select("_id");
+
+        const userIds = matchingUsers.map(u => u._id);
+        if (userIds.length > 0) {
+          filter.createdBy = { $in: userIds };
+        } else {
+          // No matching users → return empty result
+          return res.status(200).json({
+            status: "success",
+            total: 0,
+            totalPages: 0,
+            currentPage: page,
+            limit,
+            data: [],
+          });
+        }
+      }
+    }
+
+    // Search by assignment title or description
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // === Fetch data ===
+    const [assignments, total] = await Promise.all([
+      Assignment.find(filter)
+        .populate("createdBy", "name email")
+        .sort({ [sortField]: sortOrder })
+        .skip(skip)
+        .limit(limit)
+        .select("-assignedTo -files"),
+      Assignment.countDocuments(filter),
+    ]);
 
     res.status(200).json({
       status: "success",
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      limit,
       data: assignments,
     });
   } catch (err) {
     next(err);
   }
 };
+
 
 const getAssignmentById = async (req, res, next) => {
   try {

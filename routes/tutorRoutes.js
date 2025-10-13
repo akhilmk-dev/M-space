@@ -26,6 +26,9 @@ router.post('/change-password',authenticate,tutorController.changeTutorPassword)
 // tutor profile update
 router.post('/profile',authenticate,validateMiddleware(updateTutorSchema),tutorController.updateTutorProfile);
 
+// tutor home page api
+router.get('/home',authenticate,tutorController.tutorHome)
+
 // check email
 router.post('/check-email',tutorController.checkEmail);
 
