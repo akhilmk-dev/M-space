@@ -39,6 +39,6 @@ router.post('/verify-otp',tutorController.verifyOtp)
 router.post('/reset-password',tutorController.resetPassword);
 
 // tutor profile for admin
-router.get('/tutor-profile',authenticate,tutorController.getTutorProfileForAdmin);
+router.get('/tutor-profile/:tutorId',authenticate,tutorController.getTutorProfileForAdmin);
 
 module.exports = router;

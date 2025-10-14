@@ -8,6 +8,8 @@ import {
   ForbiddenError,
   InternalServerError,
 } from "../utils/customErrors.js";
+import Module from "../models/Module.js";
+import mongoose from "mongoose";
 
 // Student asking a question
 export const askQuestion = catchAsync(async (req, res) => {
@@ -121,7 +123,18 @@ export const getAllQuestions = catchAsync(async (req, res) => {
   const query = {};
 
   // Optional filter by moduleId
-  if (moduleId) query.moduleId = moduleId;
+  if (moduleId) {
+    if (!mongoose.Types.ObjectId.isValid(moduleId)) {
+      throw new BadRequestError("Invalid moduleId format");
+    }
+
+    const moduleExists = await Module.findById(moduleId);
+    if (!moduleExists) {
+      throw new NotFoundError("Module not found");
+    }
+
+    query.moduleId = moduleId;
+  }
 
   // Optional text search (on question or description)
   if (search) {

@@ -9,8 +9,6 @@ const {
 const { authenticate } = require('../middleware/authMiddleware');
 const { askQuestionSchema, answerQuestionSchema } = require('../validations/questionAnswerValidation');
 const validateMiddleware = require('../utils/validate');
-
-
 const router = express.Router();
 
 

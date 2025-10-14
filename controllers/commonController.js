@@ -82,3 +82,57 @@ exports.updateLessonCurrentTime = catchAsync(async (req, res) => {
     data: updatedRecord,
   });
 });
+
+exports.getDashboardStats = async (req, res, next) => {
+  try {
+    //  Count total students
+    const totalStudents = await Student.countDocuments();
+
+    // Count total tutors (using role or separate Tutor model)
+    const tutorRole = await Role.findOne({ role_name: /tutor/i }).lean();
+    let totalTutors = 0;
+    if (tutorRole) {
+      totalTutors = await User.countDocuments({ roleId: tutorRole._id });
+    } else {
+      // fallback if Role model not available
+      totalTutors = await User.countDocuments({ "role": "tutor" });
+    }
+
+    // Count total courses
+    const totalCourses = await Course.countDocuments();
+
+    // Get last 10 registered students (with user info populated)
+    const lastStudents = await Student.find()
+      .populate("userId", "_id name email phone")
+      .populate("courseId", "title")
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    // Response
+    res.status(200).json({
+      success: true,
+      message: "Dashboard stats fetched successfully",
+      data: {
+        totalStudents,
+        totalTutors,
+        totalCourses,
+        recentStudents: lastStudents.map((s) => ({
+          _id: s.userId?._id,
+          name: s.userId?.name,
+          email: s.userId?.email,
+          phone: s.userId?.phone,
+          course: s.courseId?.title || "N/A",
+          enrollmentDate: s.enrollmentDate,
+          mode: s.mode,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error("Error fetching dashboard stats:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
