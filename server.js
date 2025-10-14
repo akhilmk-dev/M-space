@@ -18,6 +18,7 @@ const studentRoutes = require('./routes/studentRoutes');
 const tutorRoutes = require('./routes/tutorRoutes');
 const questionRoutes = require('./routes/questionAnswerRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const swaggerDocs = require('./docs/swagger');
 const cors = require('cors');
@@ -54,6 +55,7 @@ app.use('/api/V1/common',commonRoutes);
 app.use('/api/V1/questions',questionRoutes); 
 app.use('/api/V1/students',studentRoutes);
 app.use('/api/V1/attendance',attendanceRoutes);
+app.use('/api/V1/notifications',notificationRoutes)
 
 // app.use('/api/V1/courses',courseRoutes);
 

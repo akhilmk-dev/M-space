@@ -776,7 +776,6 @@ const tutorHome = async (req, res, next) => {
   }
 };
 
-
 module.exports = {
     createTutor,
     listTutors,

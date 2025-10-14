@@ -5,6 +5,7 @@ const Course = require("../models/Course");
 const User = require("../models/User");
 const { NotFoundError, ForbiddenError, BadRequestError } = require("../utils/customErrors");
 const { uploadBase64ToS3 } = require("../utils/s3Uploader");
+const Student = require("../models/Student");
 
 exports.markAttendance = async (req, res, next) => {
     try {
