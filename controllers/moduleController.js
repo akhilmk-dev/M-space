@@ -455,7 +455,7 @@ exports.deleteModule = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
   const module = await Module.findById(moduleId);
   if (!module) throw new NotFoundError('Module not found');
-  await checkDependencies("Course",moduleId, ["courseId"]);
+  await checkDependencies("Module",moduleId, ["moduleId"]);
   const deletedModule = await Module.findByIdAndDelete(moduleId);
   res.status(200).json({ status: 'success', message: 'Module deleted successfully',data:deletedModule });
 });

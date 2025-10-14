@@ -10,7 +10,6 @@ const calculateBase64FileSize = require("../helper/calculateBase64FileSize");
 const Student = require("../models/Student");
 const { deleteFileFromS3 } = require("../utils/deleteFileFromS3");
 
-
 // === Util: Upload all files and format
 // const processAssignmentFiles = async (files = []) => {
 //     const uploaded = [];
@@ -344,7 +343,6 @@ const getAssignmentById = async (req, res, next) => {
     next(err);
   }
 };
-
 
 const getAssignmentsByCreatedBy = async (req, res, next) => {
   try {
