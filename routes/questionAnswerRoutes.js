@@ -3,7 +3,8 @@ const {
   askQuestion,
   answerQuestion,
   getLessonQuestions,
-  getStudentQuestionsByLesson
+  getStudentQuestionsByLesson,
+  getAllQuestions
 } = require('../controllers/questionAnswerController');
 const { authenticate } = require('../middleware/authMiddleware');
 const { askQuestionSchema, answerQuestionSchema } = require('../validations/questionAnswerValidation');
@@ -11,6 +12,10 @@ const validateMiddleware = require('../utils/validate');
 
 
 const router = express.Router();
+
+
+// get all questions for admin
+router.get('/',authenticate,getAllQuestions);
 
 // Student asks a question
 router.post('/', authenticate,validateMiddleware(askQuestionSchema), askQuestion);

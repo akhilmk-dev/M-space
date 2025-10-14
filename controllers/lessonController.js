@@ -156,15 +156,29 @@ exports.getLessonById = async (req, res, next) => {
       throw new NotFoundError('Invalid lesson ID');
     }
 
-    const lesson = await Lesson.findById(lessonId).select('-__v -updatedAt');
+    // Fetch lesson and populate related chapter
+    const lesson = await Lesson.findById(lessonId)
+      .select('-__v -updatedAt')
+      .lean();
 
     if (!lesson) {
       throw new NotFoundError('Lesson not found');
     }
 
+    // Fetch the chapter to get moduleId
+    const chapter = await Chapter.findById(lesson.chapterId)
+      .select('moduleId')
+      .lean();
+
+    // Attach moduleId if found
+    const moduleId = chapter?.moduleId || null;
+
     res.status(200).json({
       status: 'success',
-      data: lesson,
+      data: {
+        ...lesson,
+        moduleId,
+      },
     });
   } catch (err) {
     next(err);
@@ -360,7 +374,7 @@ exports.getAllLessons = async (req, res, next) => {
 
     const {
       chapterId,
-      createdBy,  // <--- new filter
+      createdBy, 
       search = "",
       page = 1,
       limit = 10
@@ -370,7 +384,7 @@ exports.getAllLessons = async (req, res, next) => {
 
     // Filters
     if (chapterId) filter.chapterId = chapterId;
-    if (createdBy) filter.createdBy = createdBy; // <--- apply createdBy filter
+    if (createdBy) filter.createdBy = createdBy; 
     if (search) filter.title = { $regex: search, $options: "i" };
 
     // Pagination setup

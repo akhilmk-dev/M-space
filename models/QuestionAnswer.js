@@ -27,6 +27,11 @@ const QuestionAnswerSchema = new mongoose.Schema(
       ref: "Lesson",
       required: true,
     },
+    moduleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Module",
+      required: true,
+    },
     answeredBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User", 

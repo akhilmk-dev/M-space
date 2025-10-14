@@ -11,7 +11,7 @@ import {
 
 // Student asking a question
 export const askQuestion = catchAsync(async (req, res) => {
-  const { question, lessonId,description } = req.body;
+  const { question, lessonId,description,moduleId } = req.body;
   const studentId = req.user.id; 
 
   if (!question || !lessonId) {
@@ -35,6 +35,7 @@ export const askQuestion = catchAsync(async (req, res) => {
     studentId,
     question,
     lessonId,
+    moduleId,
     description 
   });
 
@@ -100,11 +101,9 @@ export const getStudentQuestionsByLesson = catchAsync(async (req, res) => {
 // Get all questions for a lesson (for tutor)
 export const getLessonQuestions = catchAsync(async (req, res) => {
   const { lessonId } = req.params;
-
   // ensure lesson exists
   const lesson = await Lesson.findById(lessonId);
   if (!lesson) throw new NotFoundError("Lesson not found");
-
   const questions = await QuestionAnswer.find({ lessonId })
     .populate("studentId", "name email")
     .populate("answeredBy", "name email");
@@ -115,3 +114,43 @@ export const getLessonQuestions = catchAsync(async (req, res) => {
     data: questions,
   });
 });
+
+export const getAllQuestions = catchAsync(async (req, res) => {
+  const { page = 1, limit = 10, moduleId, search = "" } = req.query;
+
+  const query = {};
+
+  // Optional filter by moduleId
+  if (moduleId) query.moduleId = moduleId;
+
+  // Optional text search (on question or description)
+  if (search) {
+    query.$or = [
+      { question: { $regex: search, $options: "i" } },
+      { description: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  const skip = (page - 1) * limit;
+
+  const total = await QuestionAnswer.countDocuments(query);
+
+  const questions = await QuestionAnswer.find(query)
+    .populate("lessonId", "title") 
+    .populate("moduleId", "title") 
+    .populate("studentId", "name email") 
+    .populate("answeredBy", "name email") 
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(parseInt(limit));
+
+  res.status(200).json({
+    status: "success",
+    message: "Questions fetched successfully",
+    currentPage: parseInt(page),
+    totalPages: Math.ceil(total / limit),
+    totalRecords: total,
+    data: questions,
+  });
+});
+

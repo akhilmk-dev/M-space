@@ -776,6 +776,80 @@ const tutorHome = async (req, res, next) => {
   }
 };
 
+const getTutorProfileForAdmin = async(req, res, next)=> {
+  try {
+    // const isPermission = await hasPermission(req.user?.id, "View Tutor");
+    // if (!isPermission) {
+    //   throw new ForbiddenError("User Doesn't have permission to view tutor");
+    // }
+
+    const { tutorId } = req.params;
+    const userId = tutorId || req.user?.id;
+
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new BadRequestError("Invalid tutor ID");
+    }
+
+    // Fetch user (basic info)
+    const user = await User.findById(userId)
+      .populate("roleId", "role_name")
+      .lean();
+
+    if (!user) {
+      throw new NotFoundError("Tutor not found.");
+    }
+
+    // Ensure the user is a tutor
+    if (!user.roleId || !/tutor/i.test(user.roleId.role_name)) {
+      throw new ForbiddenError("This user is not a tutor.");
+    }
+
+    // Fetch tutor-specific info
+    const tutorInfo = await Tutor.findOne({ userId }).lean();
+    if (!tutorInfo) {
+      throw new NotFoundError("Tutor details not found.");
+    }
+
+    // Fetch assigned course details
+    let courses = [];
+    if (tutorInfo.courseIds?.length) {
+      const courseDocs = await Course.find({
+        _id: { $in: tutorInfo.courseIds },
+      })
+        .select("_id title description duration category createdAt updatedAt")
+        .lean();
+
+      courses = courseDocs.map((course) => ({
+        id: course._id,
+        title: course.title,
+        description: course.description,
+        duration: course.duration,
+        category: course.category,
+      }));
+    }
+
+    // Build response object
+    const response = {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.roleId?.role_name,
+      profile_image: tutorInfo.profile_image || null,
+      status: tutorInfo.status ?? true,
+      courses,
+      createdAt: user.createdAt,
+    };
+
+    res.status(200).json({
+      success: true,
+      data: response,
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
     createTutor,
     listTutors,
@@ -787,5 +861,6 @@ module.exports = {
     checkEmail,
     verifyOtp,
     resetPassword,
-    tutorHome
+    tutorHome,
+    getTutorProfileForAdmin
 };

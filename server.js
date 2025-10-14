@@ -56,7 +56,6 @@ app.use('/api/V1/questions',questionRoutes);
 app.use('/api/V1/students',studentRoutes);
 app.use('/api/V1/attendance',attendanceRoutes);
 app.use('/api/V1/notifications',notificationRoutes)
-
 // app.use('/api/V1/courses',courseRoutes);
 
 // swagger documentation 

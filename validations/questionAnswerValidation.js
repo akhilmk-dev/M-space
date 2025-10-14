@@ -10,6 +10,9 @@ export const askQuestionSchema = Joi.object({
   lessonId: Joi.string().required().messages({
     "string.empty": "Lesson ID is required",
   }),
+  moduleId: Joi.string().required().messages({
+    "string.empty": "Module ID is required",
+  }),
   description: Joi.string().required().max(1000).messages({
     "string.empty": "Description is required",
     "string.max": "Description must not exceed 1000 characters",
