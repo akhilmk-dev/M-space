@@ -237,12 +237,18 @@ const getAllAssignments = async (req, res, next) => {
   }
 };
 
-
 const getAssignmentById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const {
+      page = 1,
+      limit = 10,
+      status,
+      search = "",
+      lessonId,
+    } = req.query;
 
-    //  Get the assignment
+    // Get the assignment
     const assignment = await Assignment.findById(id)
       .populate("createdBy", "name email")
       .populate("assignedTo", "name email");
@@ -254,11 +260,20 @@ const getAssignmentById = async (req, res, next) => {
       });
     }
 
-    // Get submissions — ONLY populate lessonId
-    const submissions = await AssignmentSubmission.find({ assignmentId: id })
+    // 🔹 Build filter query for submissions
+    const filter = { assignmentId: id };
+
+    if (status) filter.status = status;
+    if (lessonId) filter.lessonId = lessonId;
+
+    // We'll handle student name search after populating (since it's in User)
+    const skip = (page - 1) * limit;
+
+    // Get submissions
+    let submissions = await AssignmentSubmission.find(filter)
       .populate({
         path: "lessonId",
-        select: "title chapterId", // keep chapterId for courseId trace
+        select: "title chapterId",
         populate: {
           path: "chapterId",
           select: "moduleId",
@@ -267,48 +282,69 @@ const getAssignmentById = async (req, res, next) => {
             select: "courseId",
             populate: {
               path: "courseId",
-              select: "_id"
-            }
-          }
-        }
+              select: "_id",
+            },
+          },
+        },
       })
       .populate({
         path: "studentId",
-        select: "name", // <-- get student name
+        select: "name email",
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Optional: Filter by student name (search)
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+      submissions = submissions.filter((sub) =>
+        searchRegex.test(sub.studentId?.name || "")
+      );
+    }
+
+    const totalSubmissions = submissions.length;
+    const paginatedSubmissions = submissions.slice(skip, skip + parseInt(limit));
 
     // Extract courseId from first submission
     const firstSubmission = submissions[0];
     const courseId =
       firstSubmission?.lessonId?.chapterId?.moduleId?.courseId?._id || null;
 
-    // Strip submissions to only keep lessonId and student name
-    const strippedSubmissions = submissions.map(sub => ({
+    // Clean submissions for response
+    const formattedSubmissions = paginatedSubmissions.map((sub) => ({
       _id: sub._id,
-      submittedAt: sub?.submittedAt || '',
-      reviewedAt:sub?.reviewedAt || '',
+      submittedAt: sub.submittedAt || "",
+      reviewedAt: sub.reviewedAt || "",
       userId: sub.studentId?._id,
-      studentName: sub.studentId?.name || null, 
+      studentName: sub.studentId?.name || null,
+      email: sub.studentId?.email || null,
       assignmentId: sub.assignmentId,
       lessonId: sub.lessonId?._id,
+      lessonTitle: sub.lessonId?.title || "",
+      status: sub.status,
+      marks: sub.marks,
+      comment: sub.comment,
       createdAt: sub.createdAt,
-      updatedAt: sub.updatedAt
+      updatedAt: sub.updatedAt,
     }));
 
-
-    // Return response
+    // Response
     res.status(200).json({
       status: "success",
+      message: "Assignment fetched successfully",
       assignment,
       courseId,
-      submissions: strippedSubmissions
+      total: totalSubmissions,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(totalSubmissions / limit),
+      submissions: formattedSubmissions,
     });
-
   } catch (err) {
     next(err);
   }
 };
+
 
 const getAssignmentsByCreatedBy = async (req, res, next) => {
   try {
