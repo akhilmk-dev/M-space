@@ -2,6 +2,10 @@ const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const catchAsync = require('../utils/catchAsync');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const LessonCompletion = require('../models/LessonCompletion');
+const Student = require('../models/Student');
+const Course = require('../models/Course');
+const Roles = require('../models/Roles');
+const User = require('../models/User');
 
 exports.getImageUrl = catchAsync(async (req, res) => {
     const s3 = new S3Client({
@@ -85,48 +89,64 @@ exports.updateLessonCurrentTime = catchAsync(async (req, res) => {
 
 exports.getDashboardStats = async (req, res, next) => {
   try {
-    //  Count total students
+    // Total counts
     const totalStudents = await Student.countDocuments();
 
-    // Count total tutors (using role or separate Tutor model)
-    const tutorRole = await Role.findOne({ role_name: /tutor/i }).lean();
+    // Get tutor role
+    const tutorRole = await Roles.findOne({ role_name: /tutor/i }).lean();
     let totalTutors = 0;
     if (tutorRole) {
       totalTutors = await User.countDocuments({ roleId: tutorRole._id });
     } else {
-      // fallback if Role model not available
+      // fallback if role not found
       totalTutors = await User.countDocuments({ "role": "tutor" });
     }
 
-    // Count total courses
     const totalCourses = await Course.countDocuments();
 
-    // Get last 10 registered students (with user info populated)
-    const lastStudents = await Student.find()
-      .populate("userId", "_id name email phone")
-      .populate("courseId", "title")
-      .sort({ createdAt: -1 })
+    // Fetch last 10 students
+    const students = await Student.find()
+      .sort({ enrollmentDate: -1 })
       .limit(10)
       .lean();
+
+    const userIds = students.map(s => s.userId);
+    const courseIds = students.map(s => s.courseId).filter(Boolean);
+
+    const users = await User.find({ _id: { $in: userIds } })
+      .select("_id name email phone")
+      .lean();
+
+    const courses = await Course.find({ _id: { $in: courseIds } })
+      .select("_id title")
+      .lean();
+
+    const userMap = Object.fromEntries(users.map(u => [u._id.toString(), u]));
+    const courseMap = Object.fromEntries(courses.map(c => [c._id.toString(), c.title]));
+
+    const recentStudents = students
+      .filter(s => userMap[s.userId?.toString()]) // only include students with valid user
+      .map(s => {
+        const user = userMap[s.userId.toString()];
+        return {
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          phone: user.phone,
+          course: courseMap[s.courseId?.toString()] || "N/A",
+          enrollmentDate: s.enrollmentDate || s.createdAt,
+          mode: s.mode || "N/A",
+        };
+      });
 
     // Response
     res.status(200).json({
       success: true,
       message: "Dashboard stats fetched successfully",
-      data: {
-        totalStudents,
-        totalTutors,
-        totalCourses,
-        recentStudents: lastStudents.map((s) => ({
-          _id: s.userId?._id,
-          name: s.userId?.name,
-          email: s.userId?.email,
-          phone: s.userId?.phone,
-          course: s.courseId?.title || "N/A",
-          enrollmentDate: s.enrollmentDate,
-          mode: s.mode,
-        })),
-      },
+      totalStudents,
+      totalTutors,
+      totalCourses,
+      data:recentStudents
     });
   } catch (err) {
     console.error("Error fetching dashboard stats:", err);
@@ -136,3 +156,5 @@ exports.getDashboardStats = async (req, res, next) => {
     });
   }
 };
+
+

@@ -37,7 +37,7 @@ exports.createLessons = async (req, res, next) => {
     if (!chapter) throw new Error("Invalid Chapter ID");
 
     // Insert lessons
-    const lessonDocs = lessons.map((lesson) => ({ ...lesson, chapterId,createdBy:req.user.id }));
+    const lessonDocs = lessons.map((lesson) => ({ ...lesson, chapterId, createdBy: req.user.id }));
     const savedLessons = await Lesson.insertMany(lessonDocs, { session });
 
     // Get students in the course
@@ -76,7 +76,7 @@ exports.updateSingleLesson = async (req, res, next) => {
 
   try {
     const isPermission = await hasPermission(req.user?.id, "Edit Lesson");
-    if (!isPermission ) {
+    if (!isPermission) {
       throw new ForbiddenError("User Doesn't have permission to edit lesson")
     }
     const { lessonId } = req.params
@@ -374,7 +374,7 @@ exports.getAllLessons = async (req, res, next) => {
 
     const {
       chapterId,
-      createdBy, 
+      createdBy,
       search = "",
       page = 1,
       limit = 10
@@ -384,7 +384,7 @@ exports.getAllLessons = async (req, res, next) => {
 
     // Filters
     if (chapterId) filter.chapterId = chapterId;
-    if (createdBy) filter.createdBy = createdBy; 
+    if (createdBy) filter.createdBy = createdBy;
     if (search) filter.title = { $regex: search, $options: "i" };
 
     // Pagination setup
@@ -393,7 +393,7 @@ exports.getAllLessons = async (req, res, next) => {
     const skip = (pageNum - 1) * limitNum;
 
     let sortField = 'createdAt';
-    let sortOrder = -1; 
+    let sortOrder = -1;
     if (req.query.sortBy) {
       const [field, order] = req.query.sortBy.split(':');
       sortField = field || 'createdAt';
@@ -409,8 +409,10 @@ exports.getAllLessons = async (req, res, next) => {
           select: "title courseId",
           populate: { path: "courseId", select: "title" },
         },
-      })
-      .sort({ [sortField]: sortOrder })
+      }).populate({
+        path: "createdBy",
+        select: "_id name email",
+      }).sort({ [sortField]: sortOrder })
       .skip(skip)
       .limit(limitNum)
       .lean();
@@ -418,7 +420,7 @@ exports.getAllLessons = async (req, res, next) => {
     const total = await Lesson.countDocuments(filter);
 
     res.status(200).json({
-      status:"success",
+      status: "success",
       total,
       currentPage: pageNum,
       totalPages: Math.ceil(total / limitNum),
