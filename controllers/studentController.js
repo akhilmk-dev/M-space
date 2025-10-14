@@ -742,7 +742,7 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
 
     // Get student record (enrollment info)
     const studentInfo = await Student.findOne({ userId: studentId }).lean();
-    if (!studentInfo) throw new NotFoundError("Student enrollment not found.");
+    if (!studentInfo) throw new NotFoundError("Student not found.");
 
     // Get course details
     const course = await Course.findById(studentInfo.courseId).lean();
@@ -778,6 +778,7 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        profile_image: studentInfo?.profile_image,
         course: course ? { id: course._id, title: course.title } : null,
         attendancePercentage,
       },

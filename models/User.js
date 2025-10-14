@@ -40,4 +40,14 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+UserSchema.virtual("studentProfile", {
+  ref: "Student",
+  localField: "_id", // user._id
+  foreignField: "userId", // student.userId
+  justOne: true,
+});
+
+UserSchema.set("toObject", { virtuals: true });
+UserSchema.set("toJSON", { virtuals: true });
+
 module.exports = mongoose.model("User", UserSchema);
