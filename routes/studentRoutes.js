@@ -1,5 +1,5 @@
 const express = require('express');
-const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId, listStudentsByTutor, getStudentDetailsWithSubmissions, changeStudentPassword, updateStudentProfile, getStudentsByCourseIdForDropdown, studentHome, studentPerformance, getStudentAttendance, checkEmail, verifyOtp, resetPassword } = require('../controllers/studentController');
+const { createStudent, updateStudent, listStudents, deleteStudent, getStudentsByCourseId, listStudentsByTutor, getStudentDetailsWithSubmissions, changeStudentPassword, updateStudentProfile, getStudentsByCourseIdForDropdown, studentHome, studentPerformance, getStudentAttendance, checkEmail, verifyOtp, resetPassword, getStudentProfileForAdmin } = require('../controllers/studentController');
 const { authenticate } = require('../middleware/authMiddleware');
 const { addStudentSchema, updateStudentSchema } = require('../validations/studentValidation');
 const validateMiddleware = require('../utils/validate');
@@ -51,6 +51,9 @@ router.post('/check-email',checkEmail);
 router.post('/verify-otp',verifyOtp)
 
 // reset password
-router.post('/reset-password',resetPassword)
+router.post('/reset-password',resetPassword);
+
+// get student details for admin
+router.get('/student-profile/:studentId',authenticate,getStudentProfileForAdmin);
 
 module.exports = router;

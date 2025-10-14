@@ -697,42 +697,10 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
     const course = await Course.findById(studentInfo.courseId).lean();
 
     // Calculate real attendance percentage
-    const attendanceStats = await Attendance.aggregate([
-      {
-        $match: {
-          courseId: new mongoose.Types.ObjectId(studentInfo.courseId),
-          studentId: new mongoose.Types.ObjectId(studentId),
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalDays: { $sum: 1 },
-          presentDays: {
-            $sum: { $cond: [{ $eq: ["$present", true] }, 1, 0] },
-          },
-        },
-      },
-      {
-        $project: {
-          _id: 0,
-          attendancePercentage: {
-            $cond: [
-              { $eq: ["$totalDays", 0] },
-              0,
-              {
-                $round: [
-                  { $multiply: [{ $divide: ["$presentDays", "$totalDays"] }, 100] },
-                  2,
-                ],
-              },
-            ],
-          },
-        },
-      },
-    ]);
-
-    const attendancePercentage = attendanceStats[0]?.attendancePercentage || 0;
+    const attendanceRecords = await Attendance.find({ studentId });
+    const totalDays = attendanceRecords.length;
+    const presentDays = attendanceRecords.filter(a => a.present).length;
+    const attendancePercentage = totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(2) : 0;
 
     // Build submission filter
     const filter = { studentId: studentInfo.userId };
@@ -776,7 +744,7 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
   }
 };
 
-const  updateStudentProfile = async(req, res, next)=> {
+const updateStudentProfile = async(req, res, next)=> {
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -1269,6 +1237,97 @@ const resetPassword = async (req, res, next) => {
   }
 };
 
+const getStudentProfileForAdmin = async (req, res) => {
+  try {
+    const { studentId } = req.params;
+    const { page = 1, limit = 10, status } = req.query; 
+
+    if (!mongoose.Types.ObjectId.isValid(studentId)) {
+      return res.status(400).json({ success: false, message: "Invalid student ID" });
+    }
+
+    // Get student with user details
+    const student = await Student.findOne({ userId: studentId })
+      .populate("userId", "name email phone")
+      .populate("courseId", "title");
+
+    if (!student) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+
+    //  Get attendance details
+    const attendanceRecords = await Attendance.find({ studentId });
+    const totalDays = attendanceRecords.length;
+    const presentDays = attendanceRecords.filter(a => a.present).length;
+    const attendancePercentage = totalDays > 0 ? ((presentDays / totalDays) * 100).toFixed(2) : 0;
+
+    //Get assignment submission summary
+    const filter = { studentId };
+    if (status) filter.status = status; // Apply filter if provided
+
+    const totalAssignments = await AssignmentSubmission.countDocuments({ studentId });
+    const submittedAssignments = await AssignmentSubmission.countDocuments({ studentId, status: "submitted" });
+    const pendingAssignments = await AssignmentSubmission.countDocuments({ studentId, status: "pending" });
+    const reviewdAssignments = await AssignmentSubmission.countDocuments({studentId,status:'reviewed'})
+
+    // Paginated list of assignment submissions
+    const skip = (page - 1) * limit;
+
+    const assignmentSubmissions = await AssignmentSubmission.find(filter)
+      .populate("assignmentId", "title dueDate") // populate assignment info
+      .sort({ submittedAt: -1 }) // newest first
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const totalFiltered = await AssignmentSubmission.countDocuments(filter);
+
+    // Combine results
+    const profileData = {
+      studentInfo: {
+        name: student.userId.name,
+        email: student.userId.email,
+        phone: student.userId.phone,
+        course: student.courseId?.title,
+        profileImage: student.profile_image,
+        enrollmentDate: student.enrollmentDate,
+        mode: student.mode,
+      },
+      attendance: {
+        totalDays,
+        presentDays,
+        attendancePercentage,
+      },
+      assignments: {
+        summary: {
+          totalAssignments,
+          submittedAssignments,
+          pendingAssignments,
+          reviewdAssignments
+        },
+        submissions: {
+          totalSubmissions:totalFiltered,
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(totalFiltered / limit),
+          list: assignmentSubmissions,
+        },
+      },
+    };
+
+    res.status(200).json({
+      success: true,
+      message: "Student profile fetched successfully",
+      data: profileData,
+    });
+  } catch (err) {
+    console.error("Error fetching student profile:", err);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+
 
 module.exports = {
   createStudent,
@@ -1286,5 +1345,6 @@ module.exports = {
   getStudentAttendance,
   checkEmail,
   verifyOtp,
-  resetPassword
+  resetPassword,
+  getStudentProfileForAdmin
 };

@@ -685,7 +685,7 @@ const tutorHome = async (req, res, next) => {
 
     // === Fetch first five courses ===
     const courses = await Course.find({ _id: { $in: courseIds } })
-      .select("_id title description")
+      .select("_id title description thumbnail")
       .limit(5)
       .lean();
 
