@@ -111,81 +111,131 @@ const createStudent = async(req, res, next)=> {
   }
 };
 
-// List students with pagination & search
+// List students with pagination, search & optional course filter
+// List students with pagination, search & optional course filter (fixed pagination)
 async function listStudents(req, res, next) {
   try {
     const isPermission = await hasPermission(req.user?.id, "List Student");
-    if (!isPermission ) {
-      throw new ForbiddenError("User Doesn't have permission to list student")
+    if (!isPermission) {
+      throw new ForbiddenError("User Doesn't have permission to list student");
     }
+
     // Pagination
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, parseInt(req.query.limit) || 10);
     const skip = (page - 1) * limit;
 
-    //  Search
-    const search = req.query.search || '';
-    const searchRegex = new RegExp(search, 'i');
+    // Search & Sort
+    const search = req.query.search || "";
+    const searchRegex = new RegExp(search, "i");
+    const { courseId } = req.query;
 
-    // Sort (field:direction)
-    let sortField = 'createdAt';
-    let sortOrder = -1; // default: descending
-
+    let sortField = "createdAt";
+    let sortOrder = -1;
     if (req.query.sortBy) {
-      const [field, order] = req.query.sortBy.split(':');
-      sortField = field || 'createdAt';
-      sortOrder = order === 'asc' ? 1 : -1;
+      const [field, order] = req.query.sortBy.split(":");
+      sortField = field || "createdAt";
+      sortOrder = order === "asc" ? 1 : -1;
     }
 
-    // Student role
+    // Find student role
     const studentRole = await Roles.findOne({ role_name: /student/i });
-    if (!studentRole) {
-      throw new NotFoundError('Student role not found.');
-    }
+    if (!studentRole) throw new NotFoundError("Student role not found.");
 
-    //  Match condition
-    const match = {
+    // Build base user match (role + search)
+    const userMatch = {
       roleId: studentRole._id,
       $or: [
         { name: { $regex: searchRegex } },
         { email: { $regex: searchRegex } },
         { phone: { $regex: searchRegex } },
-      ]
+      ],
     };
 
-    // Count
-    const total = await User.countDocuments(match);
+    // If courseId provided -> fetch all student userIds for that course and use them to filter users
+    let filteredUserIds = null;
+    if (courseId) {
+      if (!mongoose.Types.ObjectId.isValid(courseId)) {
+        throw new BadRequestError("Invalid courseId");
+      }
+      const studentRecords = await Student.find({ courseId }).select("userId").lean();
+      filteredUserIds = studentRecords.map(s => s.userId.toString());
 
-    // Fetch users with sort + pagination
-    const users = await User.find(match)
-      .populate('roleId', 'role_name')
+      // if no students in that course, return empty with correct pagination metadata
+      if (filteredUserIds.length === 0) {
+        return res.json({
+          status: "success",
+          data: [],
+          total: 0,
+          page,
+          limit,
+          totalPages: 0,
+        });
+      }
+
+      // restrict users to those ids
+      userMatch._id = { $in: filteredUserIds };
+    }
+
+    // Count total (respects courseId when provided)
+    const total = await User.countDocuments(userMatch);
+
+    // Fetch paginated users
+    const users = await User.find(userMatch)
+      .populate("roleId", "role_name")
       .sort({ [sortField]: sortOrder })
-      .collation({ locale: "en", strength: 2 }) 
+      .collation({ locale: "en", strength: 2 })
       .skip(skip)
       .limit(limit)
       .lean();
 
-    // 8. Join student info + course
-    const students = await Promise.all(users.map(async (u) => {
-      const studentInfo = await Student.findOne({ userId: u._id }).lean();
-      let course = null;
-      if (studentInfo) {
-        course = await Course.findById(studentInfo.courseId).lean();
-      }
+    // Now join Student info for these users in one go (avoid N DB calls)
+    const userIds = users.map(u => u._id);
+    const studentMap = {};
+    if (userIds.length > 0) {
+      const studentDocs = await Student.find({ userId: { $in: userIds } })
+        .select("userId courseId enrollmentDate profile_image mode")
+        .lean();
+      studentDocs.forEach(sd => {
+        studentMap[sd.userId.toString()] = sd;
+      });
+    }
+
+    // Pre-fetch course titles for used courseIds to reduce queries
+    const courseIdSet = new Set();
+    Object.values(studentMap).forEach(s => {
+      if (s && s.courseId) courseIdSet.add(s.courseId.toString());
+    });
+    const courseIdsToFetch = Array.from(courseIdSet);
+    const courseMap = {};
+    if (courseIdsToFetch.length > 0) {
+      const courseDocs = await Course.find({ _id: { $in: courseIdsToFetch } }).select("title").lean();
+      courseDocs.forEach(c => {
+        courseMap[c._id.toString()] = c;
+      });
+    }
+
+    // Build response array
+    const students = users.map(u => {
+      const s = studentMap[u._id.toString()];
+      // If courseId filter was provided, it's possible that some users in this page don't have a student record for that course.
+      // But because we filtered userMatch by _id IN filteredUserIds earlier, this shouldn't happen. Still safe-guard:
+      if (courseId && !s) return null;
+
+      const course = s ? courseMap[s.courseId?.toString()] : null;
       return {
         id: u._id,
         name: u.name,
         email: u.email,
         phone: u.phone,
-        role: u.roleId.role_name,
-        mode:studentInfo?.mode,
+        role: u.roleId?.role_name || null,
+        mode: s?.mode || null,
         course: course ? { id: course._id, title: course.title } : null,
-        enrollmentDate: studentInfo ? studentInfo.enrollmentDate : null,
-        profile_image: studentInfo?.profile_image || null
+        enrollmentDate: s?.enrollmentDate || null,
+        profile_image: s?.profile_image || null,
       };
-    }));
+    }).filter(Boolean);
 
-    // 9. Response
     res.json({
       status: "success",
       data: students,
@@ -198,6 +248,7 @@ async function listStudents(req, res, next) {
     next(err);
   }
 }
+
 
 // Update student
 async function updateStudent(req, res, next) {

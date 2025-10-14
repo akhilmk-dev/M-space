@@ -37,7 +37,7 @@ exports.createLessons = async (req, res, next) => {
     if (!chapter) throw new Error("Invalid Chapter ID");
 
     // Insert lessons
-    const lessonDocs = lessons.map((lesson) => ({ ...lesson, chapterId }));
+    const lessonDocs = lessons.map((lesson) => ({ ...lesson, chapterId,createdBy:req.user.id }));
     const savedLessons = await Lesson.insertMany(lessonDocs, { session });
 
     // Get students in the course
@@ -354,11 +354,13 @@ exports.getLessonsByChapterIdForStudent = async (req, res, next) => {
 exports.getAllLessons = async (req, res, next) => {
   try {
     const isPermission = await hasPermission(req.user?.id, "List Lesson");
-    if (!isPermission ) {
-      throw new ForbiddenError("User Doesn't have permission to list lesson")
+    if (!isPermission) {
+      throw new ForbiddenError("User Doesn't have permission to list lesson");
     }
+
     const {
       chapterId,
+      createdBy,  // <--- new filter
       search = "",
       page = 1,
       limit = 10
@@ -368,6 +370,7 @@ exports.getAllLessons = async (req, res, next) => {
 
     // Filters
     if (chapterId) filter.chapterId = chapterId;
+    if (createdBy) filter.createdBy = createdBy; // <--- apply createdBy filter
     if (search) filter.title = { $regex: search, $options: "i" };
 
     // Pagination setup
@@ -377,7 +380,6 @@ exports.getAllLessons = async (req, res, next) => {
 
     let sortField = 'createdAt';
     let sortOrder = -1; 
-    // Sorting setup
     if (req.query.sortBy) {
       const [field, order] = req.query.sortBy.split(':');
       sortField = field || 'createdAt';
@@ -402,7 +404,7 @@ exports.getAllLessons = async (req, res, next) => {
     const total = await Lesson.countDocuments(filter);
 
     res.status(200).json({
-      success: true,
+      status:"success",
       total,
       currentPage: pageNum,
       totalPages: Math.ceil(total / limitNum),
@@ -413,6 +415,7 @@ exports.getAllLessons = async (req, res, next) => {
     next(err);
   }
 };
+
 
 // exports.updateLessons = async (req, res, next) => {
 //   try {

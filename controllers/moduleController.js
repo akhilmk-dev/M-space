@@ -7,6 +7,7 @@ const {
   BadRequestError,
   EmptyRequestBodyError,
   ForbiddenError,
+  UnAuthorizedError,
 } = require('../utils/customErrors');
 const Lesson = require('../models/Lesson');
 const LessonCompletion = require('../models/LessonCompletion');
@@ -317,7 +318,7 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
   const studentId = req.user.id;
   
   if (!courseId) {
-    throw new BadRequestError("Course ID is required");
+    throw new UnAuthorizedError("Course ID is required");
   }
 
   const course = await Course.findById(courseId);
