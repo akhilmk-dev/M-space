@@ -340,7 +340,6 @@ async function updateStudent(req, res, next) {
 async function deleteStudent(req, res, next) {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
   try {
     const isPermission = await hasPermission(req.user?.id, "Delete Student");
     if (!isPermission ) {
@@ -755,6 +754,7 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
         email: user.email,
         phone: user.phone,
         profile_image: studentInfo?.profile_image,
+        mode:studentInfo?.mode,
         course: course ? { id: course._id, title: course.title } : null,
         attendancePercentage,
       },

@@ -65,7 +65,7 @@ exports.getAllChapters = catchAsync(async (req, res) => {
 
   // Sort parsing from `sortBy=field:direction`
   let sortField = 'createdAt';
-  let sortOrder = -1; // default: descending
+  let sortOrder = -1; 
 
   if (req.query.sortBy) {
     const [field, order] = req.query.sortBy.split(':');

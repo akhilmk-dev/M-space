@@ -168,6 +168,7 @@ const login = async (req, res, next) => {
       const student = await Student.findOne({ userId: user._id });
       if (student) {
         userObject.courseId = student.courseId;
+        userObject.mode = student?.mode;
       }
     }
 
