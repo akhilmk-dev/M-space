@@ -111,143 +111,120 @@ const createStudent = async(req, res, next)=> {
   }
 };
 
-// List students with pagination, search & optional course filter
 // List students with pagination, search & optional course filter (fixed pagination)
-async function listStudents(req, res, next) {
+ const listStudents = async (req, res, next) => {
   try {
-    const isPermission = await hasPermission(req.user?.id, "List Student");
-    if (!isPermission) {
-      throw new ForbiddenError("User Doesn't have permission to list student");
+    //  Permission check
+    const hasPerm = await hasPermission(req.user?.id, "List Student");
+    if (!hasPerm) {
+      throw new ForbiddenError("User doesn't have permission to list students");
     }
 
-    // Pagination
+    //  Pagination
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.max(1, parseInt(req.query.limit) || 10);
     const skip = (page - 1) * limit;
 
-    // Search & Sort
-    const search = req.query.search || "";
+    //  Search, Sort, Filters
+    const { search = "", courseId, sortBy = "createdAt:desc" } = req.query;
+    const [sortField, sortOrderRaw] = sortBy.split(":");
+    const sortOrder = sortOrderRaw === "asc" ? 1 : -1;
     const searchRegex = new RegExp(search, "i");
-    const { courseId } = req.query;
 
-    let sortField = "createdAt";
-    let sortOrder = -1;
-    if (req.query.sortBy) {
-      const [field, order] = req.query.sortBy.split(":");
-      sortField = field || "createdAt";
-      sortOrder = order === "asc" ? 1 : -1;
-    }
-
-    // Find student role
-    const studentRole = await Roles.findOne({ role_name: /student/i });
-    if (!studentRole) throw new NotFoundError("Student role not found.");
-
-    // Build base user match (role + search)
-    const userMatch = {
-      roleId: studentRole._id,
-      $or: [
-        { name: { $regex: searchRegex } },
-        { email: { $regex: searchRegex } },
-        { phone: { $regex: searchRegex } },
-      ],
-    };
-
-    // If courseId provided -> fetch all student userIds for that course and use them to filter users
-    let filteredUserIds = null;
+    //  Build query
+    const query = {};
     if (courseId) {
       if (!mongoose.Types.ObjectId.isValid(courseId)) {
         throw new BadRequestError("Invalid courseId");
       }
-      const studentRecords = await Student.find({ courseId }).select("userId").lean();
-      filteredUserIds = studentRecords.map(s => s.userId.toString());
-
-      // if no students in that course, return empty with correct pagination metadata
-      if (filteredUserIds.length === 0) {
-        return res.json({
-          status: "success",
-          data: [],
-          total: 0,
-          page,
-          limit,
-          totalPages: 0,
-        });
-      }
-
-      // restrict users to those ids
-      userMatch._id = { $in: filteredUserIds };
+      query.courseId = courseId;
     }
 
-    // Count total (respects courseId when provided)
-    const total = await User.countDocuments(userMatch);
+    //  Populate user info (filter by user details using $lookup + $match)
+    const pipeline = [
+      { $match: query },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      { $unwind: "$user" },
+      {
+        $lookup: {
+          from: "courses",
+          localField: "courseId",
+          foreignField: "_id",
+          as: "course",
+        },
+      },
+      { $unwind: { path: "$course", preserveNullAndEmptyArrays: true } },
+      {
+        $match: {
+          $or: [
+            { "user.name": { $regex: searchRegex } },
+            { "user.email": { $regex: searchRegex } },
+            { "user.phone": { $regex: searchRegex } },
+          ],
+        },
+      },
+      {
+        $sort: {
+          [sortField]: sortOrder,
+        },
+      },
+      {
+        $skip: skip,
+      },
+      {
+        $limit: limit,
+      },
+      {
+        $project: {
+          _id: 1,
+          mode: 1,
+          enrollmentDate: 1,
+          profile_image: 1,
+          "user._id": 1,
+          "user.name": 1,
+          "user.email": 1,
+          "user.phone": 1,
+          "user.roleId": 1,
+          "course._id": 1,
+          "course.title": 1,
+        },
+      },
+    ];
 
-    // Fetch paginated users
-    const users = await User.find(userMatch)
-      .populate("roleId", "role_name")
-      .sort({ [sortField]: sortOrder })
-      .collation({ locale: "en", strength: 2 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const students = await Student.aggregate(pipeline);
 
-    // Now join Student info for these users in one go (avoid N DB calls)
-    const userIds = users.map(u => u._id);
-    const studentMap = {};
-    if (userIds.length > 0) {
-      const studentDocs = await Student.find({ userId: { $in: userIds } })
-        .select("userId courseId enrollmentDate profile_image mode")
-        .lean();
-      studentDocs.forEach(sd => {
-        studentMap[sd.userId.toString()] = sd;
-      });
-    }
-
-    // Pre-fetch course titles for used courseIds to reduce queries
-    const courseIdSet = new Set();
-    Object.values(studentMap).forEach(s => {
-      if (s && s.courseId) courseIdSet.add(s.courseId.toString());
-    });
-    const courseIdsToFetch = Array.from(courseIdSet);
-    const courseMap = {};
-    if (courseIdsToFetch.length > 0) {
-      const courseDocs = await Course.find({ _id: { $in: courseIdsToFetch } }).select("title").lean();
-      courseDocs.forEach(c => {
-        courseMap[c._id.toString()] = c;
-      });
-    }
-
-    // Build response array
-    const students = users.map(u => {
-      const s = studentMap[u._id.toString()];
-      // If courseId filter was provided, it's possible that some users in this page don't have a student record for that course.
-      // But because we filtered userMatch by _id IN filteredUserIds earlier, this shouldn't happen. Still safe-guard:
-      if (courseId && !s) return null;
-
-      const course = s ? courseMap[s.courseId?.toString()] : null;
-      return {
-        id: u._id,
-        name: u.name,
-        email: u.email,
-        phone: u.phone,
-        role: u.roleId?.role_name || null,
-        mode: s?.mode || null,
-        course: course ? { id: course._id, title: course.title } : null,
-        enrollmentDate: s?.enrollmentDate || null,
-        profile_image: s?.profile_image || null,
-      };
-    }).filter(Boolean);
+    //  Count total
+    const total = await Student.countDocuments(query);
+    const totalPages = Math.ceil(total / limit);
 
     res.json({
       status: "success",
-      data: students,
+      data: students.map(s => ({
+        id: s._id,
+        name: s.user?.name,
+        email: s.user?.email,
+        phone: s.user?.phone,
+        mode: s.mode,
+        enrollmentDate: s.enrollmentDate,
+        profile_image: s.profile_image,
+        course: s.course ? { id: s.course._id, title: s.course.title } : null,
+      })),
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit),
+      totalPages,
     });
   } catch (err) {
     next(err);
   }
-}
+};
 
 // Update student
 async function updateStudent(req, res, next) {
