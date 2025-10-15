@@ -15,6 +15,7 @@ async function checkDependencies(docName,targetId, refFields = []) {
     for (const field of refFields) {
       const exists = await Model.exists({ [field]: targetId });
       if (exists) {
+        console.log(field,modelName)
         throw new ConflictError(
           `Can't delete this ${docName} as dependencies found`
         );
