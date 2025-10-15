@@ -13,7 +13,7 @@ const AssignmentSchema = new mongoose.Schema({
   deadline: { type: Date,required:[true,"Deadline is required"] },
   files: [FileSchema],
   assignedTo: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  status: { type: String, enum: ['Active', 'published'], default: 'draft' },
+  status: { type: String, enum: ['Active', 'Closed'], default: 'draft' },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   totalMarks: {type:Number,default:100}
 }, { timestamps: true });
