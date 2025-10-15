@@ -3,7 +3,7 @@ const cron = require('node-cron');
 const Assignment = require('../models/Assignment');
 
 const updateExpiredAssignments = () => {
-  cron.schedule('*/1 * * * *', async () => { // every minute for testing
+  cron.schedule('0 * * * *', async () => { // every minute for testing
     console.log(`[CRON] Running check at ${new Date().toISOString()}`);
     try {
       const result = await Assignment.updateMany(

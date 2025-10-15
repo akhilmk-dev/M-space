@@ -42,8 +42,8 @@ const UserSchema = new mongoose.Schema(
 
 UserSchema.virtual("studentProfile", {
   ref: "Student",
-  localField: "_id", // user._id
-  foreignField: "userId", // student.userId
+  localField: "_id", 
+  foreignField: "userId", 
   justOne: true,
 });
 

@@ -3,8 +3,8 @@ const { ConflictError } = require("../utils/customErrors");
 
 /**
  * Check if a document is referenced in any collection before deletion
- * @param {String} targetId - The ID of the document you want to delete
- * @param {String[]} refFields - The possible reference field names (e.g. ["courseId", "moduleId"])
+ * @param {String} targetId 
+ * @param {String[]} refFields 
  */
 async function checkDependencies(docName,targetId, refFields = []) {
   const modelNames = mongoose.modelNames();

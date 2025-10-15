@@ -15,8 +15,8 @@ import Tutor from "../models/Tutor.js";
 
 // Student asking a question
 export const askQuestion = catchAsync(async (req, res) => {
-  const { question, lessonId,description,moduleId } = req.body;
-  const studentId = req.user.id; 
+  const { question, lessonId, description, moduleId } = req.body;
+  const studentId = req.user.id;
 
   if (!question || !lessonId) {
     throw new BadRequestError("Question and lessonId are required");
@@ -40,7 +40,7 @@ export const askQuestion = catchAsync(async (req, res) => {
     question,
     lessonId,
     moduleId,
-    description 
+    description
   });
 
   res.status(201).json({
@@ -86,6 +86,9 @@ export const answerQuestion = catchAsync(async (req, res) => {
 export const getStudentQuestionsByLesson = catchAsync(async (req, res) => {
   const { lessonId } = req.params;
   const studentId = req.user.id;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
 
   if (!lessonId || !mongoose.Types.ObjectId.isValid(lessonId)) {
     return res.status(400).json({
@@ -94,36 +97,41 @@ export const getStudentQuestionsByLesson = catchAsync(async (req, res) => {
     });
   }
 
-  const questions = await QuestionAnswer.find({ lessonId,studentId })
-    .populate({
-      path: "studentId", // this refers to User
-      select: "name email",
-      populate: {
-        path: "studentProfile", // virtual field in User
-        select: "profile_image",
-      },
-    })
+  // Count total documents for pagination
+  const total = await QuestionAnswer.countDocuments({ lessonId, studentId });
+
+  // Fetch questions with pagination
+  const questions = await QuestionAnswer.find({ lessonId, studentId }).populate({
+    path: "studentId",
+    select: "name email",
+    populate: { path: "studentProfile", select: "profile_image" },
+  })
     .populate("lessonId", "title")
     .populate("answeredBy", "name email")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .lean();
 
   // Flatten the data
   const formatted = questions.map((q) => ({
     _id: q._id,
     lesson: q.lessonId?.title || "N/A",
+    question: q.question || null,
+    description: q.description || null,
     answer: q.answer || "",
     answeredBy: q.answeredBy
       ? {
-          name: q.answeredBy.name,
-          email: q.answeredBy.email,
-        }
+        name: q.answeredBy.name,
+        email: q.answeredBy.email,
+      }
       : null,
     student: q.studentId
       ? {
-          name: q.studentId.name,
-          email: q.studentId.email,
-          profile_image: q.studentId.studentProfile?.profile_image || null,
-        }
+        name: q.studentId.name,
+        email: q.studentId.email,
+        profile_image: q.studentId.studentProfile?.profile_image || null,
+      }
       : null,
     createdAt: q.createdAt,
   }));
@@ -131,23 +139,36 @@ export const getStudentQuestionsByLesson = catchAsync(async (req, res) => {
   res.status(200).json({
     success: true,
     message: "Lesson questions fetched successfully",
-    total: formatted.length,
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+    limit,
     data: formatted,
   });
 });
 
+
 // Get all questions for a lesson (for tutor)
 export const getLessonQuestions = catchAsync(async (req, res) => {
   const { lessonId } = req.params;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
 
   // Ensure lesson exists
   const lesson = await Lesson.findById(lessonId);
   if (!lesson) throw new NotFoundError("Lesson not found");
 
-  // Fetch questions and populate user references
+  // Count total documents for pagination
+  const total = await QuestionAnswer.countDocuments({ lessonId });
+
+  // Fetch questions with pagination
   const questions = await QuestionAnswer.find({ lessonId })
-    .populate("studentId", "name email") // User collection
-    .populate("answeredBy", "name email") // Tutor user
+    .populate("studentId", "name email")
+    .populate("answeredBy", "name email")
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(limit)
     .lean();
 
   // Collect unique userIds
@@ -192,9 +213,14 @@ export const getLessonQuestions = catchAsync(async (req, res) => {
   res.status(200).json({
     status: "success",
     message: "Lesson questions fetched successfully",
+    total,
+    totalPages: Math.ceil(total / limit),
+    currentPage: page,
+    limit,
     data: formatted,
   });
 });
+
 
 export const getAllQuestions = catchAsync(async (req, res) => {
   const { page = 1, limit = 10, moduleId, search = "" } = req.query;
@@ -228,10 +254,10 @@ export const getAllQuestions = catchAsync(async (req, res) => {
   const total = await QuestionAnswer.countDocuments(query);
 
   const questions = await QuestionAnswer.find(query)
-    .populate("lessonId", "title") 
-    .populate("moduleId", "title") 
-    .populate("studentId", "name email") 
-    .populate("answeredBy", "name email") 
+    .populate("lessonId", "title")
+    .populate("moduleId", "title")
+    .populate("studentId", "name email")
+    .populate("answeredBy", "name email")
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));

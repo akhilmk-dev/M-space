@@ -54,7 +54,6 @@ exports.getStudentNotifications = async (req, res, next) => {
   }
 };
 
-
 exports.getTutorNotifications = async (req, res, next) => {
     try {
       const userId  = req.user.id;

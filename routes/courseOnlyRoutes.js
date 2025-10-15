@@ -8,6 +8,7 @@ const { authenticate } = require('../middleware/authMiddleware');
 // CRUD routes
 router.post('/',authenticate,validateMiddleware(courseValidation), courseController.createCourse);
 router.get('/',authenticate, courseController.getAllCourses);
+router.get('/admin/dropdown',authenticate,courseController.getActiveCourses)
 router.get('/:courseId',authenticate, courseController.getCourseById);
 router.put('/:courseId',authenticate,validateMiddleware(courseValidation), courseController.updateCourse);
 router.delete('/:courseId',authenticate, courseController.deleteCourse);

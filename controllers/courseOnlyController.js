@@ -394,3 +394,22 @@ exports.getCoursesByAssignedTutor = catchAsync(async (req, res) => {
   });
 });
 
+exports.getActiveCourses = catchAsync(async (req, res) => {
+  // const isPermission = await hasPermission(req.user?.id, "List Course");
+  // if (!isPermission) {
+  //   throw new ForbiddenError("User doesn't have permission to list courses");
+  // }
+
+  // Query only courses with status = true
+  const courses = await Course.find({ status: true })
+    .select("_id title") 
+    .sort({ title: 1 });
+
+  res.status(200).json({
+    status: "success",
+    total: courses.length,
+    data: courses,
+  });
+});
+
+
