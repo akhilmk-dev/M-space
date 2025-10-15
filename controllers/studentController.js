@@ -249,7 +249,6 @@ async function listStudents(req, res, next) {
   }
 }
 
-
 // Update student
 async function updateStudent(req, res, next) {
   const session = await mongoose.startSession();
@@ -1378,7 +1377,6 @@ const getStudentProfileForAdmin = async (req, res) => {
     });
   }
 };
-
 
 
 module.exports = {

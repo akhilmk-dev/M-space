@@ -519,7 +519,6 @@ const updateAssignment = async (req, res, next) => {
   }
 };
 
-
 const deleteAssignment = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();

@@ -206,6 +206,7 @@ exports.updateCourse = catchAsync(async (req, res) => {
       description: course.description,
       status: course.status,
       thumbnail: course.thumbnail,
+      createdAt:course?.createdAt,
       createdBy: {
         _id: user._id,
         name: user.name,

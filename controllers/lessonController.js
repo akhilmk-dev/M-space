@@ -12,7 +12,7 @@ const LessonCompletion = require('../models/LessonCompletion');
 const hasPermission = require('../helper/hasPermission');
 const catchAsync = require('../utils/catchAsync');
 const checkDependencies = require('../helper/checkDependencies');
-const { sendNotificationToUser } = require('../utils/sendNotificationToUser');
+const { sendNotificationToStudent } = require('../utils/sendNotificationToUser');
 
 exports.createLessons = async (req, res, next) => {
   const session = await mongoose.startSession();
@@ -53,7 +53,7 @@ exports.createLessons = async (req, res, next) => {
     const notificationMessage = `New lesson(s) added: ${lessonTitles}`;
 
     for (const userId of studentIds) {
-      sendNotificationToUser(userId, "New Lessons Added", notificationMessage);
+      sendNotificationToStudent(userId, "New Lessons Added", notificationMessage);
     }
 
     return res.status(201).json({
