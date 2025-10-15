@@ -419,28 +419,28 @@ const updateAssignment = async (req, res, next) => {
 
     const updatedBy = req.user?.id || req.body.updatedBy;
 
-    // 1. Check if assignment exists
+    // Check if assignment exists
     const assignment = await Assignment.findById(assignmentId).session(session);
     if (!assignment) {
       throw new NotFoundError("Assignment not found.");
     }
 
-    // 2. Determine assigned students (all or specific)
+    //  Handle assigned students
     let newStudentIds = assignedTo;
-
     if (assignedTo.length === 0 || assignedTo.includes("all")) {
       const validCourse = await Course.findById(courseId).session(session);
       if (!validCourse) throw new BadRequestError("Invalid courseId provided.");
 
-      const allUsers = await User.find().populate("roleId").session(session);
-      const studentUsers = allUsers.filter(
-        (user) => user.roleId?.role_name === "Student"
-      );
+      const studentUsers = await User.find()
+        .populate("roleId")
+        .session(session)
+        .then((users) => users.filter((u) => u.roleId?.role_name === "Student"));
+
       const studentUserIds = studentUsers.map((u) => u._id);
 
       const enrolledStudents = await Student.find({
         userId: { $in: studentUserIds },
-        courseId: courseId,
+        courseId,
       }).session(session);
 
       newStudentIds = enrolledStudents.map((s) => s.userId);
@@ -450,55 +450,55 @@ const updateAssignment = async (req, res, next) => {
       throw new BadRequestError("No valid students assigned to this assignment.");
     }
 
-    // 3. Process new files if provided
-    const processedFiles = await processAssignmentFiles(files, assignment?.files);
+    //  Process files safely
+    const processedFiles = await processAssignmentFiles(files, assignment.files);
 
-    // 4. Update assignment
-    assignment.title = title || assignment.title;
-    assignment.description = description || assignment.description;
-    assignment.courseId = courseId || assignment.courseId;
-    assignment.lessonId = lessonId || assignment.lessonId;
-    assignment.deadline = deadline || assignment.deadline;
-    if (processedFiles.length > 0) assignment.files = processedFiles;
-    assignment.assignedTo = newStudentIds;
-    assignment.status = "Active" || assignment.status;
+    //  Update directly using updateOne (safer inside transaction)
+    const updatedAssignment = await Assignment.findByIdAndUpdate(
+      assignmentId,
+      {
+        $set: {
+          title: title ?? assignment.title,
+          description: description ?? assignment.description,
+          courseId: courseId ?? assignment.courseId,
+          lessonId: lessonId ?? assignment.lessonId,
+          deadline: deadline ?? assignment.deadline,
+          files: processedFiles.length > 0 ? processedFiles : assignment.files,
+          assignedTo: newStudentIds,
+          status: status ?? assignment.status,
+          updatedBy,
+        },
+      },
+      { new: true, session }
+    );
 
-    await assignment.save({ session });
-
-    // 5. Sync submissions
+    //  Sync submissions
     const existingSubmissions = await AssignmentSubmission.find({
-      assignmentId: assignment._id,
+      assignmentId: updatedAssignment._id,
     }).session(session);
 
-    const existingStudentIds = existingSubmissions.map((s) =>
-      s.studentId.toString()
-    );
+    const existingStudentIds = existingSubmissions.map((s) => s.studentId.toString());
     const newStudentIdStrings = newStudentIds.map((id) => id.toString());
 
-    // 5a. Find students to remove submissions for
     const studentsToRemove = existingStudentIds.filter(
       (id) => !newStudentIdStrings.includes(id)
     );
-
-    // 5b. Find students to add submissions for
     const studentsToAdd = newStudentIdStrings.filter(
       (id) => !existingStudentIds.includes(id)
     );
 
-    // 6. Remove submissions
     if (studentsToRemove.length > 0) {
       await AssignmentSubmission.deleteMany({
-        assignmentId: assignment._id,
+        assignmentId: updatedAssignment._id,
         studentId: { $in: studentsToRemove },
       }).session(session);
     }
 
-    // 7. Add new submissions
     if (studentsToAdd.length > 0) {
       const newSubmissions = studentsToAdd.map((studentId) => ({
-        assignmentId: assignment._id,
+        assignmentId: updatedAssignment._id,
         studentId,
-        lessonId: assignment.lessonId,
+        lessonId: updatedAssignment.lessonId,
         status: "pending",
       }));
 
@@ -510,7 +510,7 @@ const updateAssignment = async (req, res, next) => {
 
     res.status(200).json({
       message: "Assignment updated successfully.",
-      assignment,
+      assignment: updatedAssignment,
     });
   } catch (err) {
     await session.abortTransaction();
@@ -518,6 +518,7 @@ const updateAssignment = async (req, res, next) => {
     next(err);
   }
 };
+
 
 const deleteAssignment = async (req, res, next) => {
   const session = await mongoose.startSession();
