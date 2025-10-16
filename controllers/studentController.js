@@ -11,6 +11,7 @@ const AssignmentSubmission = require('../models/AssignmentSubmission');
 const { uploadBase64ToS3 } = require('../utils/s3Uploader');
 const hasPermission = require('../helper/hasPermission');
 const Attendance = require('../models/Attendance');
+const sendBrevoEmail = require('../utils/sendBrevoEmail');
 
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
