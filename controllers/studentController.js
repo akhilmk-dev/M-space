@@ -1387,7 +1387,6 @@ const getStudentProfileForAdmin = async (req, res) => {
   }
 };
 
-
 module.exports = {
   createStudent,
   listStudents,

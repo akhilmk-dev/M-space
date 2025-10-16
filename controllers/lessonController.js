@@ -52,9 +52,11 @@ exports.createLessons = async (req, res, next) => {
     const lessonTitles = lessons.map(l => l.title).join(", ");
     const notificationMessage = `New lesson(s) added: ${lessonTitles}`;
 
-    for (const userId of studentIds) {
-      sendNotificationToStudent(userId, "New Lessons Added", notificationMessage);
-    }
+    await Promise.all(
+      studentIds.map((userId) =>
+        sendNotificationToStudent(userId, "New Lessons Added", notificationMessage)
+      )
+    );
 
     return res.status(201).json({
       success: true,
@@ -68,6 +70,7 @@ exports.createLessons = async (req, res, next) => {
     return res.status(500).json({
       success: false,
       message: "Internal server error",
+      error:err
     });
   }
 };

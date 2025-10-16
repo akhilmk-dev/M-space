@@ -207,6 +207,7 @@ async function listTutors(req, res, next) {
             name: u.name,
             email: u.email,
             phone: u.phone,
+            status:u.status,
             role: u.roleId.role_name,
             courses: courses.map((c) => ({ id: c._id, title: c.title })),
             profile_image: tutorInfo?.profile_image || null
