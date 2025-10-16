@@ -89,7 +89,7 @@ async function createTutor(req, res, next) {
           phone,
           passwordHash,
           roleId: tutorRole._id,
-          status: true,
+          status: status || true,
         },
       ],
       { session }
@@ -239,7 +239,7 @@ async function updateTutor(req, res, next) {
       throw new ForbiddenError("User Doesn't have permission to edit tutor")
     }
     const { tutorId } = req.params;
-    const { name, email, phone, courseIds, profile_image } = req.body;
+    const { name, email, phone, courseIds, profile_image,status } = req.body;
 
     // Validate tutor ID
     if (!mongoose.Types.ObjectId.isValid(tutorId)) {
@@ -280,6 +280,7 @@ async function updateTutor(req, res, next) {
       user.email = email;
     }
     if (phone) user.phone = phone;
+    user.status = status ?? user.status;
 
     await user.save({ session });
 
@@ -332,6 +333,7 @@ async function updateTutor(req, res, next) {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        status:user.status,
         role: role?.role_name,
         profileImage: tutorRecord?.profile_image,
         courses,

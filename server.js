@@ -1,5 +1,6 @@
 const express = require('express');
 const dotenv = require('dotenv');
+dotenv.config();
 const connectDB = require('./Config/db');
 // routes imports
 const authRoutes = require('./routes/authRoutes');
@@ -19,14 +20,12 @@ const tutorRoutes = require('./routes/tutorRoutes');
 const questionRoutes = require('./routes/questionAnswerRoutes');
 const attendanceRoutes = require('./routes/attendanceRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
-
 const swaggerDocs = require('./docs/swagger');
 const cors = require('cors');
 const clc = require('cli-color');
 const morgan = require('morgan');
 const errorHandler = require('./middleware/errorHandler');
 const updateExpiredAssignments = require('./cron/updateExpiredAssignments');
-dotenv.config();
 connectDB();
 
 const app = express();

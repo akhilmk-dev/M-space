@@ -53,7 +53,7 @@ const registerSchema = Joi.object({
       'string.empty': 'Role is required',
       'any.required': 'Role is required',
     }),
-
+  status:Joi.boolean(),
   courseId: Joi.string()
     .when('role', {
       is: 'Student',

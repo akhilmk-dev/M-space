@@ -13,15 +13,15 @@ const hasPermission = require('../helper/hasPermission');
 const Attendance = require('../models/Attendance');
 
 // Create only student (you already have)
-const createStudent = async(req, res, next)=> {
+const createStudent = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const isPermission = await hasPermission(req.user?.id, "Add Student");
-    if (!isPermission ) {
+    if (!isPermission) {
       throw new ForbiddenError("User Doesn't have permission to create student")
     }
-    const { name, email, phone, password, courseId, profile_image, status,mode } = req.body;
+    const { name, email, phone, password, courseId, profile_image, status, mode } = req.body;
     if (!name || !email || !phone || !password || !courseId) {
       throw new BadRequestError("All fields are required");
     }
@@ -68,21 +68,21 @@ const createStudent = async(req, res, next)=> {
         phone,
         passwordHash,
         roleId: studentRole._id,
-        status: true,
+        status: status || true,
       }],
       { session }
     );
     const user = userDocs[0];
 
     // create student record
-  const student = await Student.create(
+    const student = await Student.create(
       [{
         userId: user._id,
         courseId,
         enrollmentDate: new Date(),
         profile_image: profileImageUrl,
-        status: status,
-        mode:mode
+        status: true,
+        mode: mode
       }],
       { session }
     );
@@ -97,6 +97,7 @@ const createStudent = async(req, res, next)=> {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        status: user.status,
         profileImage: student[0].profile_image,
         course: {
           id: course._id,
@@ -224,6 +225,7 @@ async function listStudents(req, res, next) {
         name: u.name,
         email: u.email,
         phone: u.phone,
+        status: u.status,
         role: u.roleId?.role_name || null,
         mode: s?.mode || null,
         course: course ? { id: course._id, title: course.title } : null,
@@ -252,11 +254,11 @@ async function updateStudent(req, res, next) {
 
   try {
     const isPermission = await hasPermission(req.user?.id, "Edit Student");
-    if (!isPermission ) {
+    if (!isPermission) {
       throw new ForbiddenError("User Doesn't have permission to edit student")
     }
     const { studentId } = req.params; // ID of student user
-    const { name, email, phone, courseId, profile_image,status=true,mode } = req.body;
+    const { name, email, phone, courseId, profile_image, status = true, mode } = req.body;
 
     // Validate student ID
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
@@ -296,6 +298,7 @@ async function updateStudent(req, res, next) {
       user.email = email;
     }
     if (phone) user.phone = phone;
+    user.status = status ?? user.status
 
     await user.save({ session });
 
@@ -341,10 +344,10 @@ async function updateStudent(req, res, next) {
         name: user.name,
         email: user.email,
         phone: user.phone,
-        mode:studentInfo.mode,
+        mode: studentInfo.mode,
         profileImage: studentInfo.profile_image,
         course: course ? { id: course._id, title: course.title } : undefined,
-        status:status
+        status: status
       }
     });
 
@@ -359,10 +362,10 @@ async function updateStudent(req, res, next) {
 async function deleteStudent(req, res, next) {
   const session = await mongoose.startSession();
   session.startTransaction();
-  
+
   try {
     const isPermission = await hasPermission(req.user?.id, "Delete Student");
-    if (!isPermission ) {
+    if (!isPermission) {
       throw new ForbiddenError("User Doesn't have permission to delete student")
     }
     const { studentId } = req.params;
@@ -412,7 +415,7 @@ const changeStudentPassword = async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const userId = req.user.id; 
+    const userId = req.user.id;
     const { oldPassword, newPassword } = req.body;
 
     if (!oldPassword || !newPassword) {
@@ -478,7 +481,11 @@ const getStudentsByCourseIdForDropdown = async (req, res, next) => {
 
     // Find students enrolled in the course
     const students = await Student.find({ courseId })
-      .populate('userId', 'name email phone status createdAt')
+      .populate({
+        path: 'userId',
+        match: { status: true },
+        select: 'name email phone status createdAt',
+      })
       .lean();
 
     const result = students.map(student => ({
@@ -520,7 +527,11 @@ const getStudentsByCourseId = async (req, res, next) => {
 
     // Get all students of course with populated user
     let students = await Student.find({ courseId })
-      .populate("userId", "name email phone status createdAt")
+      .populate({
+        path: 'userId',
+        match: { status: true },
+        select: 'name email phone status createdAt',
+      })
       .lean();
 
     // Filter by search (after population)
@@ -631,6 +642,7 @@ const listStudentsByTutor = async (req, res, next) => {
       .populate({
         path: "userId",
         match: {
+          status: true,
           $or: [
             { name: { $regex: searchRegex } },
             { email: { $regex: searchRegex } },
@@ -733,7 +745,7 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
 
     // Get student user
     const user = await User.findById(studentId).lean();
-    if (!user) throw new NotFoundError("Student not found.");
+    if (!user || !user?.status) throw new NotFoundError("Student not found.");
 
     // Get student record (enrollment info)
     const studentInfo = await Student.findOne({ userId: studentId }).lean();
@@ -774,7 +786,7 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
         email: user.email,
         phone: user.phone,
         profile_image: studentInfo?.profile_image,
-        mode:studentInfo?.mode,
+        mode: studentInfo?.mode,
         course: course ? { id: course._id, title: course.title } : null,
         attendancePercentage,
       },
@@ -792,12 +804,12 @@ const getStudentDetailsWithSubmissions = async (req, res, next) => {
   }
 };
 
-const updateStudentProfile = async(req, res, next)=> {
+const updateStudentProfile = async (req, res, next) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
   try {
-    const studentId = req.user.id; 
+    const studentId = req.user.id;
     const { name, email, phone, courseId, profile_image } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
@@ -957,7 +969,7 @@ const studentHome = async (req, res, next) => {
           phone: student.userId?.phone,
           course: student.courseId?.courseName,
           courseDuration: student.courseId?.duration,
-          profile_image:student?.profile_image || null
+          profile_image: student?.profile_image || null
         },
         stats: {
           attendancePercentage,
@@ -1069,9 +1081,9 @@ const studentPerformance = async (req, res, next) => {
     const averageMarksPercentage =
       gradedAssignments.length > 0
         ? Math.round(
-            gradedAssignments.reduce((sum, a) => sum + a.percentage, 0) /
-              gradedAssignments.length
-          )
+          gradedAssignments.reduce((sum, a) => sum + a.percentage, 0) /
+          gradedAssignments.length
+        )
         : 0;
 
     // ---------- RESPONSE ----------
@@ -1120,11 +1132,11 @@ const getStudentAttendance = async (req, res, next) => {
 
     if (year) {
       const selectedYear = parseInt(year);
-      let startDate = new Date(selectedYear, 0, 1); 
-      let endDate = new Date(selectedYear + 1, 0, 1); 
+      let startDate = new Date(selectedYear, 0, 1);
+      let endDate = new Date(selectedYear + 1, 0, 1);
 
       if (month) {
-        const selectedMonth = parseInt(month) - 1; 
+        const selectedMonth = parseInt(month) - 1;
         startDate = new Date(selectedYear, selectedMonth, 1);
         endDate = new Date(selectedYear, selectedMonth + 1, 1);
       }
@@ -1228,7 +1240,7 @@ const checkEmail = async (req, res, next) => {
     }
 
     res.json({
-      status:"success",
+      status: "success",
       message: "OTP send successfully",
     });
   } catch (err) {
@@ -1237,7 +1249,7 @@ const checkEmail = async (req, res, next) => {
 };
 
 const verifyOtp = async (req, res) => {
-  const {email,otp}= req.body;
+  const { email, otp } = req.body;
   const user = await User.findOne({ email }).populate("roleId");
   if (!user) throw new NotFoundError("Student not found");
 
@@ -1260,7 +1272,7 @@ const resetPassword = async (req, res, next) => {
 
     const user = await User.findOne({ email }).populate("roleId");
     if (!user) throw new NotFoundError("Student not found");
-  
+
     // Check if user is a student
     if (!user.roleId || !/student/i.test(user.roleId.role_name)) {
       throw new ForbiddenError("Invalid student");
@@ -1276,7 +1288,7 @@ const resetPassword = async (req, res, next) => {
 
     // Hash and save new password
     user.passwordHash = await bcrypt.hash(newPassword, 10);
-    user.otpVerified = false; 
+    user.otpVerified = false;
     await user.save();
 
     res.json({ status: "success", message: "Password reset successfully" });
@@ -1288,7 +1300,7 @@ const resetPassword = async (req, res, next) => {
 const getStudentProfileForAdmin = async (req, res) => {
   try {
     const { studentId } = req.params;
-    const { page = 1, limit = 10, status } = req.query; 
+    const { page = 1, limit = 10, status } = req.query;
 
     if (!mongoose.Types.ObjectId.isValid(studentId)) {
       return res.status(400).json({ success: false, message: "Invalid student ID" });
@@ -1316,7 +1328,7 @@ const getStudentProfileForAdmin = async (req, res) => {
     const totalAssignments = await AssignmentSubmission.countDocuments({ studentId });
     const submittedAssignments = await AssignmentSubmission.countDocuments({ studentId, status: "submitted" });
     const pendingAssignments = await AssignmentSubmission.countDocuments({ studentId, status: "pending" });
-    const reviewdAssignments = await AssignmentSubmission.countDocuments({studentId,status:'reviewed'})
+    const reviewdAssignments = await AssignmentSubmission.countDocuments({ studentId, status: 'reviewed' })
 
     // Paginated list of assignment submissions
     const skip = (page - 1) * limit;
@@ -1353,7 +1365,7 @@ const getStudentProfileForAdmin = async (req, res) => {
           reviewdAssignments
         },
         submissions: {
-          totalSubmissions:totalFiltered,
+          totalSubmissions: totalFiltered,
           currentPage: parseInt(page),
           totalPages: Math.ceil(totalFiltered / limit),
           list: assignmentSubmissions,

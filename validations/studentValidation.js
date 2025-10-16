@@ -32,6 +32,7 @@ export const addStudentSchema = Joi.object({
       "any.only": "Mode must be either 'part time' or 'full time'",
       "string.empty": "Mode is required",
     }),
+  status: Joi.boolean(),
   profile_image: Joi.string()
     .allow(null)
     .optional()
@@ -64,6 +65,7 @@ export const updateStudentSchema = Joi.object({
   courseId: Joi.string().required().messages({
     "string.empty": "Course is required",
   }),
+  status: Joi.boolean(),
   roleId: Joi.string(),
   mode: Joi.string()
     .valid("part time", "full time")

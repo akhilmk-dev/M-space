@@ -119,13 +119,13 @@ const login = async (req, res, next) => {
       throw new BadRequestError("Email, password, and role are required.");
     }
 
-    // 1. Find role document by role name
+    //  Find role document by role name
     const roleDoc = await Role.findOne({ role_name: role });
     if (!roleDoc) {
       throw new BadRequestError("Invalid role specified.");
     }
 
-    // 2. Find user by email and populate roleId
+    // Find user by email and populate roleId
     const user = await User.findOne({ email }).populate('roleId');
     if (!user || !user.status) {
       throw new InternalServerError("Invalid credentials.");
@@ -140,17 +140,17 @@ const login = async (req, res, next) => {
       }
     }
 
-    // 4. Check password
+    // Check password
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       throw new InternalServerError("Invalid credentials.");
     }
 
-    // 5. Create tokens
+    //  Create tokens
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
 
-    // 6. Build user object
+    // Build user object
     const userObject = {
       id: user._id,
       name: user.name,
@@ -163,7 +163,7 @@ const login = async (req, res, next) => {
       },
     };
 
-    // 7. Add courseId for students
+    // Add courseId for students
     if (roleDoc.role_name === 'Student') {
       const student = await Student.findOne({ userId: user._id });
       if (student) {
@@ -172,7 +172,7 @@ const login = async (req, res, next) => {
       }
     }
 
-    // 8. For non-student/tutor roles, use roleId.permissions instead
+    // For non-student/tutor roles, use roleId.permissions instead
     if (roleDoc.role_name != 'Student' && roleDoc.role_name != 'Tutor') {
       const role = await Role.findById(user.roleId?._id)
       let permissions = [];
@@ -187,7 +187,7 @@ const login = async (req, res, next) => {
       userObject.role.permissions = permissions || [];
     }
 
-    // 9. Send response
+    // Send response
     res.status(200).json({
       message: "Login successful",
       accessToken,

@@ -10,6 +10,7 @@ export const addTutorSchema = Joi.object({
     "string.empty": "Email is required",
     "string.email": "Email must be a valid email",
   }),
+  status: Joi.boolean(),
   phone: Joi.string()
     .pattern(/^\d{10}$/)
     .required()
@@ -57,6 +58,7 @@ export const updateTutorSchema = Joi.object({
   courseIds: Joi.array().items(Joi.string().required()).min(1).required().messages({
     "array.min": "At least one course must be selected",
   }),
+  status: Joi.boolean(),
   roleId:Joi.string(),
   profile_image: Joi.string().optional().allow(null)
 });

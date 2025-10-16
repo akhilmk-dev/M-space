@@ -3,7 +3,6 @@ const User = require("../models/User");
 const Role = require("../models/Roles");
 const Course = require('../models/Course')
 const { registerSchema } = require('../validations/authValidation');
-
 const {
   BadRequestError,
   UnAuthorizedError,
@@ -21,7 +20,7 @@ const createUser = async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const { name, email, phone, password, roleId } = req.body;
+    const { name, email, phone, password, roleId,status } = req.body;
     // Check if user already exists
     const existingUser = await User.findOne({ email }).session(session);
     if (existingUser) {
@@ -49,7 +48,7 @@ const createUser = async (req, res, next) => {
         phone,
         passwordHash,
         roleId: roleDoc._id,
-        status: true,
+        status: status || true,
       }],
       { session }
     );
@@ -67,6 +66,7 @@ const createUser = async (req, res, next) => {
         name: user?.name,
         email: user?.email,
         phone: user?.phone,
+        status: user?.status,
         createdAt:user?.createdAt,
         role: {
          role_name: roleDoc?.role_name,
@@ -123,7 +123,7 @@ const getUsers = async (req, res, next) => {
       .populate("roleId", "role_name")
       .select("name email phone status roleId createdAt updatedAt")
       .sort({ [sortField]: sortOrder })
-      .collation({ locale: "en", strength: 2 }) // case-insensitive sorting
+      .collation({ locale: "en", strength: 2 }) 
       .skip(skip)
       .limit(limit)
       .lean();
@@ -134,7 +134,7 @@ const getUsers = async (req, res, next) => {
       name: user.name,
       email: user.email,
       phone: user.phone,
-      isActive: user.status,
+      status: user.status,
       role: {
         role_name: user.roleId?.role_name || null,
         _id: user.roleId?._id,
@@ -200,7 +200,7 @@ try {
 const updateUser = async (req, res, next) => {
 try {
   const { userId } = req.params;
-  const { name, email, phone, status, roleId } = req.body;
+  const { name, email, phone, status, roleId} = req.body;
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
     throw new BadRequestError("Invalid userId format.");
@@ -242,7 +242,7 @@ try {
       name: user.name,
       email: user.email,
       phone: user.phone,
-      isActive: user.status,
+      status: user.status,
       role: {
         role_name:roleDoc?.role_name,
         _id:roleDoc?._id
