@@ -73,7 +73,7 @@ const createStudent = async (req, res, next) => {
         phone,
         passwordHash,
         roleId: studentRole._id,
-        status: status || true,
+        status: status ,
       }],
       { session }
     );

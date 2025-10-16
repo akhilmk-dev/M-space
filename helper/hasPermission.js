@@ -8,7 +8,7 @@ const { UnAuthorizedError, NotFoundError } = require('../utils/customErrors');
 const hasPermission = async (userId, permissionName) => {
   const user = await User.findById(userId).populate('roleId');
   if(!user){
-    throw new NotFoundError("User not found");
+    throw new UnAuthorizedError("User not found");
   }
   const roleId = user?.roleId?._id
   if (!roleId) return false;

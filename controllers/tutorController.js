@@ -89,7 +89,7 @@ async function createTutor(req, res, next) {
           phone,
           passwordHash,
           roleId: tutorRole._id,
-          status: status || true,
+          status: status,
         },
       ],
       { session }
