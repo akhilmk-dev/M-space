@@ -22,7 +22,7 @@ const hasPermission = require('../helper/hasPermission');
 exports.createModule = catchAsync(async (req, res) => {
   const { title, orderIndex, courseId, thumbnail } = req.body;
   const isPermission = await hasPermission(req.user?.id, "Add Module");
-  if (!isPermission ) {
+  if (!isPermission) {
     throw new ForbiddenError("User Doesn't have permission to create module")
   }
   if (!title || !courseId) {
@@ -72,49 +72,45 @@ exports.createModule = catchAsync(async (req, res) => {
 
 // Get All Modules
 exports.getAllModules = catchAsync(async (req, res) => {
-  const isPermission = await hasPermission(req.user?.id, "List Module");
-  if (!isPermission ) {
-    throw new ForbiddenError("User Doesn't have permission to list module")
-  }
-  // Pagination
+  // 1️⃣ Pagination
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 10;
   const skip = (page - 1) * limit;
 
-  // Search
+  // 2️⃣ Search
   const search = req.query.search || '';
   const searchRegex = new RegExp(search, 'i');
 
-  // Sort parsing from `sortBy=field:direction`
+  // 3️⃣ Sort parsing from `sortBy=field:direction`
   let sortField = 'createdAt';
-  let sortOrder = -1; // default: descending
-
+  let sortOrder = -1; // default descending
   if (req.query.sortBy) {
     const [field, order] = req.query.sortBy.split(':');
     sortField = field || 'createdAt';
     sortOrder = order === 'asc' ? 1 : -1;
   }
 
-  // Course filter
-  const { courseId } = req.query;
+  // 4️⃣ Optional course filter
+  const courseId = req.query.courseId;
 
-  // Build query
+  // 5️⃣ Build query
   const query = {
+    ...(courseId ? { courseId } : {}),
     title: { $regex: searchRegex },
-    ...(courseId ? { courseId } : {}), // Add course filter if provided
   };
 
-  // Total count
+  // 6️⃣ Count total modules
   const totalModules = await Module.countDocuments(query);
 
-  // Fetch data
+  // 7️ Fetch modules
   const modules = await Module.find(query)
-    .populate('courseId', 'title') // populate course title
-    .sort({ [sortField]: sortOrder })
-    .skip(skip)
-    .limit(limit);
+  .sort({ [sortField]: sortOrder })
+  .skip(skip)   
+  .limit(limit)
+  .populate('courseId', 'title _id')  
+  .lean();
 
-  // Respond
+  // 8️⃣ Response
   res.status(200).json({
     status: 'success',
     page,
@@ -124,6 +120,9 @@ exports.getAllModules = catchAsync(async (req, res) => {
     data: modules,
   });
 });
+
+
+
 
 exports.getModuleById = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
@@ -208,7 +207,7 @@ exports.updateModule = catchAsync(async (req, res) => {
   const { moduleId } = req.params;
   const updates = req.body;
   const isPermission = await hasPermission(req.user?.id, "Edit Module");
-  if (!isPermission ) {
+  if (!isPermission) {
     throw new ForbiddenError("User Doesn't have permission to edit module")
   }
   // Find module
@@ -314,9 +313,9 @@ const formatDuration = (minutes) => {
 
 exports.getModulesByCourseId = catchAsync(async (req, res) => {
   const { courseId } = req.params;
-  const { status, page = 1, limit = 10 ,search} = req.query; 
+  const { status, page = 1, limit = 10, search } = req.query;
   const studentId = req.user.id;
-  
+
   if (!courseId) {
     throw new UnAuthorizedError("Course ID is required");
   }
@@ -449,13 +448,13 @@ exports.getModulesByCourseId = catchAsync(async (req, res) => {
 // Delete Module
 exports.deleteModule = catchAsync(async (req, res) => {
   const isPermission = await hasPermission(req.user?.id, "Delete Module");
-  if (!isPermission ) {
+  if (!isPermission) {
     throw new ForbiddenError("User Doesn't have permission to delete module")
   }
   const { moduleId } = req.params;
   const module = await Module.findById(moduleId);
   if (!module) throw new NotFoundError('Module not found');
-  await checkDependencies("Module",moduleId, ["moduleId"]);
+  await checkDependencies("Module", moduleId, ["moduleId"]);
   const deletedModule = await Module.findByIdAndDelete(moduleId);
-  res.status(200).json({ status: 'success', message: 'Module deleted successfully',data:deletedModule });
+  res.status(200).json({ status: 'success', message: 'Module deleted successfully', data: deletedModule });
 });

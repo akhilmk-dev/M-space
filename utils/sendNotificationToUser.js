@@ -6,7 +6,7 @@ async function sendNotificationToStudent(userId, title, message, url = "", extra
     const response = await axios.post(
       "https://onesignal.com/api/v1/notifications",
       {
-        app_id: process.env.ONESIGNAL_STUDENT_APP_ID, // OneSignal App ID
+        app_id: "1d2d88ec-0fce-46a3-896b-54ae35180bfe", // OneSignal App ID
         include_external_user_ids: [userId], // MongoDB userId
         headings: { en: title },
         contents: { en: message },
@@ -19,7 +19,7 @@ async function sendNotificationToStudent(userId, title, message, url = "", extra
       },
       {
         headers: {
-          Authorization: `Basic ${process.env.ONESIGNAL_STUDENT_APP_REST_API_KEY}`, // REST API key
+          Authorization: `Basic os_v2_app_duwyr3apzzdkhcllksxdkgal7ytbnq4abvzefp56b3orgslhk5wea5pixe2jra7dmqm7zxshqaymsi5nz7u6g57cs6tj4pnq4bdt6ny`, // REST API key
           "Content-Type": "application/json",
         },
       }

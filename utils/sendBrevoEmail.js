@@ -2,7 +2,7 @@ const Brevo = require("@getbrevo/brevo");
 require("dotenv").config();
 
 const apiInstance = new Brevo.TransactionalEmailsApi();
-apiInstance.authentications["apiKey"].apiKey = process.env.BREVO_API_KEY;
+apiInstance.authentications["apiKey"].apiKey = "yZamynMSIxWPC534Y";
 
 async function sendBrevoEmail(toEmail, subject, htmlContent) {
   try {
@@ -11,8 +11,8 @@ async function sendBrevoEmail(toEmail, subject, htmlContent) {
     sendSmtpEmail.subject = subject;
     sendSmtpEmail.htmlContent = htmlContent;
     sendSmtpEmail.sender = {
-      name: process.env.BREVO_SENDER_NAME,
-      email: process.env.BREVO_SENDER_EMAIL,
+      name: "Mspace Learning App",
+      email: "mspacenest@gmail.com",
     };
     sendSmtpEmail.to = [{ email: toEmail }];
 
