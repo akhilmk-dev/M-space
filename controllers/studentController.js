@@ -1271,6 +1271,7 @@ const checkEmail = async (req, res, next) => {
       message: "OTP sent successfully to your email",
     });
   } catch (err) {
+    console.log(err)
     next(err);
   }
 };
