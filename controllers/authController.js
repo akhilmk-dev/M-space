@@ -127,8 +127,11 @@ const login = async (req, res, next) => {
 
     // Find user by email and populate roleId
     const user = await User.findOne({ email }).populate('roleId');
-    if (!user || !user.status) {
+    if (!user) {
       throw new InternalServerError("Invalid credentials.");
+    }
+    if(!user.status){
+      throw new InternalServerError("User is Inactive");
     }
 
     const currentRole = user.roleId?.role_name;

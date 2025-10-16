@@ -48,7 +48,7 @@ const createUser = async (req, res, next) => {
         phone,
         passwordHash,
         roleId: roleDoc._id,
-        status: status || true,
+        status: status ,
       }],
       { session }
     );

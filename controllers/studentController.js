@@ -12,6 +12,10 @@ const { uploadBase64ToS3 } = require('../utils/s3Uploader');
 const hasPermission = require('../helper/hasPermission');
 const Attendance = require('../models/Attendance');
 
+function generateOTP() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 // Create only student (you already have)
 const createStudent = async (req, res, next) => {
   const session = await mongoose.startSession();
@@ -1239,56 +1243,93 @@ const checkEmail = async (req, res, next) => {
       throw new ForbiddenError("Invalid student");
     }
 
+    // Generate and store OTP
+    const otp = generateOTP();
+    user.otpCode = otp;
+    user.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins validity
+    await user.save();
+
+    // Send email with Brevo
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; color: #333;">
+        <h2>Password Reset Request</h2>
+        <p>Hello ${user.name || "Student"},</p>
+        <p>Your OTP for password reset is:</p>
+        <h3 style="color:#2E86C1;">${otp}</h3>
+        <p>This OTP is valid for 10 minutes.</p>
+        <p>If you didn’t request a password reset, please ignore this email.</p>
+        <br/>
+        <p>Regards,<br/>Your App Team</p>
+      </div>
+    `;
+
+    await sendBrevoEmail(email, "Password Reset OTP", htmlContent);
+
     res.json({
       status: "success",
-      message: "OTP send successfully",
+      message: "OTP sent successfully to your email",
     });
   } catch (err) {
     next(err);
   }
 };
 
-const verifyOtp = async (req, res) => {
-  const { email, otp } = req.body;
-  const user = await User.findOne({ email }).populate("roleId");
-  if (!user) throw new NotFoundError("Student not found");
+const verifyOtp = async (req, res, next) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) throw new BadRequestError("Email and OTP are required");
 
-  // Check if user is a student
-  if (!user.roleId || !/student/i.test(user.roleId.role_name)) {
-    throw new ForbiddenError("Invalid student");
+    const user = await User.findOne({ email }).populate("roleId");
+    if (!user) throw new NotFoundError("Student not found");
+
+    if (!user.roleId || !/student/i.test(user.roleId.role_name)) {
+      throw new ForbiddenError("Invalid student");
+    }
+
+    // Validate OTP
+    if (!user.otpCode || user.otpCode !== otp) {
+      throw new BadRequestError("Invalid OTP");
+    }
+
+    // Check OTP expiry
+    if (new Date() > new Date(user.otpExpiresAt)) {
+      throw new BadRequestError("OTP expired. Please request a new one.");
+    }
+
+    user.otpVerified = true;
+    await user.save();
+
+    res.json({ status: "success", message: "OTP verified successfully" });
+  } catch (err) {
+    next(err);
   }
-  if (otp !== "55555") throw new BadRequestError("Invalid OTP");
-
-  user.otpVerified = true;
-  await user.save();
-
-  res.json({ status: "success", message: "OTP verified" });
 };
 
 const resetPassword = async (req, res, next) => {
   try {
     const { email, newPassword } = req.body;
-    if (!email || !newPassword) throw new BadRequestError("Email and new password are required");
+    if (!email || !newPassword)
+      throw new BadRequestError("Email and new password are required");
 
     const user = await User.findOne({ email }).populate("roleId");
     if (!user) throw new NotFoundError("Student not found");
 
-    // Check if user is a student
     if (!user.roleId || !/student/i.test(user.roleId.role_name)) {
       throw new ForbiddenError("Invalid student");
     }
 
     if (!user.otpVerified) throw new ForbiddenError("OTP not verified");
 
-    // Check if new password is same as old password
+    // Check if new password same as old
     const isSamePassword = await bcrypt.compare(newPassword, user.passwordHash);
-    if (isSamePassword) {
+    if (isSamePassword)
       throw new BadRequestError("New password cannot be the same as old password");
-    }
 
-    // Hash and save new password
+    // Update password
     user.passwordHash = await bcrypt.hash(newPassword, 10);
     user.otpVerified = false;
+    user.otpCode = undefined;
+    user.otpExpiresAt = undefined;
     await user.save();
 
     res.json({ status: "success", message: "Password reset successfully" });

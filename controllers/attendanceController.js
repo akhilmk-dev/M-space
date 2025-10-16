@@ -257,7 +257,10 @@ exports.generateAttendanceReportPdf = async (req, res) => {
       doc.moveDown();
       doc.fontSize(12).text(`From: ${startDate}  To: ${endDate}`);
       doc.moveDown();
-      doc.text(`Generated on: ${new Date().toLocaleString()}`);
+      doc.text(`Generated on: ${new Date().toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+        hour12: true, 
+      })}`);
       doc.moveDown(2);
   
       // --- Table Setup ---
@@ -322,7 +325,6 @@ exports.getAllAttendance = async (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-
     const search = req.query.search || "";
     const searchRegex = new RegExp(search, "i");
 
